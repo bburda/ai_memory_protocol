@@ -233,7 +233,8 @@ Only after peeking — pick the 2-3 most relevant IDs and `get` them individuall
 | New task or topic | `recall --tag topic:<X> --format brief` |
 | Entering unfamiliar code | `recall --tag repo:<X> --type fact --format brief` |
 | Before a design decision | `recall --tag topic:<X> --type dec` |
-| When stuck or debugging | `recall <error keywords>` |
+| Encountering an error or failure | `recall <error message keywords>` — FIRST reaction before debugging; check if this problem was already solved |
+| Stuck after initial attempts | `recall --tag topic:<X> --type mem,fact` — broaden search to related areas and past solutions |
 | Before implementing a pattern | `recall --tag intent:coding-style --type pref` |
 
 #### 2. WRITE — Record at specific trigger points
