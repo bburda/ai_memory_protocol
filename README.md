@@ -23,10 +23,6 @@ AI agents lose context between sessions. This protocol gives them a structured w
 ## Installation
 
 ```bash
-# From PyPI (when published)
-pipx install ai-memory-protocol
-
-# From source
 git clone https://github.com/bburda/ai_memory_protocol.git
 pipx install -e ai_memory_protocol/
 
