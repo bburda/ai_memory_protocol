@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -167,3 +169,83 @@ def expand_graph(
         frontier = next_frontier
 
     return {nid: needs[nid] for nid in collected if nid in needs}
+
+
+# ---------------------------------------------------------------------------
+# Sphinx-build discovery and rebuild
+# ---------------------------------------------------------------------------
+
+
+def find_sphinx_build(workspace: Path) -> str:
+    """Locate the sphinx-build executable.
+
+    Search order:
+      1. ``workspace/.venv/bin/sphinx-build``
+      2. Walk parent directories for ``.venv/bin/sphinx-build``
+      3. ``shutil.which("sphinx-build")`` (system PATH)
+
+    Returns the path string, or raises ``FileNotFoundError``.
+    """
+    # 1. Workspace venv
+    candidate = workspace / ".venv" / "bin" / "sphinx-build"
+    if candidate.exists():
+        return str(candidate)
+
+    # 2. Walk parent directories
+    for parent in workspace.parents:
+        candidate = parent / ".venv" / "bin" / "sphinx-build"
+        if candidate.exists():
+            return str(candidate)
+        # Also check sibling directories (e.g., ../ros2_medkit/.venv/)
+        if parent.is_dir():
+            for sibling in parent.iterdir():
+                if sibling.is_dir() and sibling != workspace:
+                    candidate = sibling / ".venv" / "bin" / "sphinx-build"
+                    if candidate.exists():
+                        return str(candidate)
+            break  # Only check immediate parent's siblings
+
+    # 3. System PATH
+    system = shutil.which("sphinx-build")
+    if system:
+        return system
+
+    raise FileNotFoundError(
+        "sphinx-build not found. Install it with: pip install sphinx sphinx-needs\n"
+        "Or create a venv in your memory workspace: memory init --install <dir>"
+    )
+
+
+def run_rebuild(workspace: Path) -> tuple[bool, str]:
+    """Run Sphinx build to regenerate needs.json.
+
+    Returns ``(success, message)`` — never raises on build failure.
+    """
+    try:
+        sphinx_cmd = find_sphinx_build(workspace)
+    except FileNotFoundError as e:
+        return False, f"Rebuild skipped: {e}"
+
+    cmd = [sphinx_cmd, "-b", "html", "-q", str(workspace), str(workspace / "_build" / "html")]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as e:
+        return False, f"Rebuild failed: {e}"
+
+    if result.returncode != 0:
+        return False, f"Rebuild failed:\n{result.stderr}"
+
+    needs = load_needs(workspace)
+    by_type: dict[str, int] = {}
+    by_status: dict[str, int] = {}
+    for n in needs.values():
+        by_type[n.get("type", "?")] = by_type.get(n.get("type", "?"), 0) + 1
+        by_status[n.get("status", "?")] = by_status.get(n.get("status", "?"), 0) + 1
+
+    lines = [
+        f"needs.json updated at {find_needs_json(workspace)}",
+        f"Total: {len(needs)} memories",
+        f"  Types:    {', '.join(f'{k}={v}' for k, v in sorted(by_type.items()))}",
+        f"  Statuses: {', '.join(f'{k}={v}' for k, v in sorted(by_status.items()))}",
+    ]
+    return True, "\n".join(lines)

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -23,7 +22,15 @@ from typing import Any
 from mcp.server import Server
 from mcp.types import TextContent, Tool
 
-from .engine import expand_graph, find_workspace, load_needs, resolve_id, tag_match, text_match
+from .engine import (
+    expand_graph,
+    find_workspace,
+    load_needs,
+    resolve_id,
+    run_rebuild,
+    tag_match,
+    text_match,
+)
 from .formatter import format_brief, format_compact, format_context_pack, format_full
 from .rst import (
     add_tags_in_rst,
@@ -385,18 +392,8 @@ def _format_output(
 
 def _do_rebuild(workspace: Path) -> str:
     """Run Sphinx build to regenerate needs.json."""
-    venv_sphinx = workspace / ".venv" / "bin" / "sphinx-build"
-    sphinx_cmd = str(venv_sphinx) if venv_sphinx.exists() else "sphinx-build"
-    cmd = [sphinx_cmd, "-b", "html", "-q", str(workspace), str(workspace / "_build" / "html")]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        return f"Rebuild failed: {result.stderr}"
-
-    needs = load_needs(workspace)
-    by_type: dict[str, int] = {}
-    for n in needs.values():
-        by_type[n.get("type", "?")] = by_type.get(n.get("type", "?"), 0) + 1
-    return f"Rebuilt successfully. {len(needs)} memories: {', '.join(f'{k}={v}' for k, v in sorted(by_type.items()))}"
+    success, message = run_rebuild(workspace)
+    return message
 
 
 def _text_response(text: str) -> list[TextContent]:
@@ -534,8 +531,12 @@ def _handle_add(args: dict[str, Any]) -> list[TextContent]:
     result_lines = [f"Added {nid} → {target.name}"]
 
     if args.get("rebuild", True):
-        rebuild_result = _do_rebuild(workspace)
-        result_lines.append(rebuild_result)
+        success, rebuild_msg = run_rebuild(workspace)
+        if success:
+            result_lines.append(rebuild_msg)
+        else:
+            result_lines.append(f"Warning: Memory was added but rebuild failed: {rebuild_msg}")
+            result_lines.append("Run memory_rebuild manually when sphinx-build is available.")
 
     return _text_response("\n".join(result_lines))
 

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 import textwrap
 from datetime import date
@@ -29,7 +28,15 @@ from pathlib import Path
 
 from . import __version__
 from .config import TYPE_FILES
-from .engine import expand_graph, find_workspace, load_needs, resolve_id, tag_match, text_match
+from .engine import (
+    expand_graph,
+    find_workspace,
+    load_needs,
+    resolve_id,
+    run_rebuild,
+    tag_match,
+    text_match,
+)
 from .formatter import format_brief, format_compact, format_context_pack, format_full
 from .rst import (
     add_tags_in_rst,
@@ -327,28 +334,10 @@ def cmd_stale(args: argparse.Namespace) -> None:
 def cmd_rebuild(args: argparse.Namespace) -> None:
     """Rebuild needs.json by running Sphinx build."""
     workspace = find_workspace(args.dir)
-    venv_sphinx = workspace / ".venv" / "bin" / "sphinx-build"
-    sphinx_cmd = str(venv_sphinx) if venv_sphinx.exists() else "sphinx-build"
-    cmd = [sphinx_cmd, "-b", "html", "-q", str(workspace), str(workspace / "_build" / "html")]
-    print(f"Building: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Build failed:\n{result.stderr}", file=sys.stderr)
+    success, message = run_rebuild(workspace)
+    print(message)
+    if not success:
         sys.exit(1)
-
-    from .engine import find_needs_json
-
-    print(f"needs.json updated at {find_needs_json(workspace)}")
-
-    needs = load_needs(workspace)
-    by_type: dict[str, int] = {}
-    by_status: dict[str, int] = {}
-    for n in needs.values():
-        by_type[n.get("type", "?")] = by_type.get(n.get("type", "?"), 0) + 1
-        by_status[n.get("status", "?")] = by_status.get(n.get("status", "?"), 0) + 1
-    print(f"Total: {len(needs)} memories")
-    print(f"  Types:    {', '.join(f'{k}={v}' for k, v in sorted(by_type.items()))}")
-    print(f"  Statuses: {', '.join(f'{k}={v}' for k, v in sorted(by_status.items()))}")
 
 
 # ---------------------------------------------------------------------------
