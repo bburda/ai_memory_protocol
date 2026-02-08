@@ -21,9 +21,13 @@ dependencies = [
     "sphinx-design>=0.6",
 ]
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.6.0"]
+
 [project.urls]
 Homepage = "https://github.com/bburda/ai_memory_protocol"
 Repository = "https://github.com/bburda/ai_memory_protocol"
+Issues = "https://github.com/bburda/ai_memory_protocol/issues"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -34,9 +38,36 @@ where = ["src"]
 
 [project.scripts]
 memory = "ai_memory_protocol.cli:main"
+memory-mcp-stdio = "ai_memory_protocol.mcp_server:main_stdio"
 
 [dependency-groups]
 dev = [
     "ruff>=0.8",
     "pytest>=8.0",
+    "pre-commit>=4.0",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ai_memory_protocol"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

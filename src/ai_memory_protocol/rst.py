@@ -166,7 +166,7 @@ def update_field_in_rst(
     Searches across all RST files including split files.
     Returns ``(success, message)``.
     """
-    for mem_type, rst_rel in TYPE_FILES.items():
+    for mem_type, _rst_rel in TYPE_FILES.items():
         for rst_path in _find_all_rst_files(workspace, mem_type):
             if not rst_path.exists():
                 continue
@@ -187,7 +187,6 @@ def update_field_in_rst(
             field_pattern = f":{field}:"
             for j in range(max(0, id_line_idx - 2), min(len(lines), id_line_idx + 20)):
                 if field_pattern in lines[j]:
-                    old_line = lines[j]
                     lines[j] = re.sub(
                         rf":{field}:\s*.*",
                         f":{field}: {new_value}",

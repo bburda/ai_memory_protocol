@@ -44,8 +44,7 @@ def find_workspace(explicit: str | None = None) -> Path:
             return d
 
     raise SystemExit(
-        "No memory workspace found.\n"
-        "Run 'memory init <dir>' to create one, or set MEMORY_DIR."
+        "No memory workspace found.\nRun 'memory init <dir>' to create one, or set MEMORY_DIR."
     )
 
 
@@ -107,14 +106,16 @@ def load_needs(workspace: Path) -> dict[str, Any]:
 
 def text_match(need: dict[str, Any], query: str) -> bool:
     """Check if a need matches a free-text query (OR logic — any word matches)."""
-    searchable = " ".join([
-        need.get("id", ""),
-        need.get("title", ""),
-        need.get("description", ""),
-        " ".join(need.get("tags", [])),
-        need.get("scope", ""),
-        need.get("source", ""),
-    ]).lower()
+    searchable = " ".join(
+        [
+            need.get("id", ""),
+            need.get("title", ""),
+            need.get("description", ""),
+            " ".join(need.get("tags", [])),
+            need.get("scope", ""),
+            need.get("source", ""),
+        ]
+    ).lower()
     return any(word in searchable for word in query.lower().split())
 
 

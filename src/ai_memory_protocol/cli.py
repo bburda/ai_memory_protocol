@@ -28,7 +28,7 @@ from datetime import date
 from pathlib import Path
 
 from . import __version__
-from .config import LINK_FIELDS, TYPE_FILES, TYPE_PREFIXES
+from .config import TYPE_FILES
 from .engine import expand_graph, find_workspace, load_needs, resolve_id, tag_match, text_match
 from .formatter import format_brief, format_compact, format_context_pack, format_full
 from .rst import (
@@ -41,7 +41,6 @@ from .rst import (
     update_field_in_rst,
 )
 from .scaffold import init_workspace
-
 
 # ---------------------------------------------------------------------------
 # Subcommands
@@ -179,7 +178,7 @@ def cmd_list(args: argparse.Namespace) -> None:
     """List all memories, optionally filtered."""
     workspace = find_workspace(args.dir)
     needs = load_needs(workspace)
-    for nid, need in sorted(needs.items()):
+    for _nid, need in sorted(needs.items()):
         if args.type and need.get("type") != args.type:
             continue
         if args.status and need.get("status") != args.status:
@@ -240,7 +239,7 @@ def cmd_review(args: argparse.Namespace) -> None:
     needs = load_needs(workspace)
     today = date.today().isoformat()
     due = []
-    for nid, need in needs.items():
+    for _nid, need in needs.items():
         if need.get("status") == "deprecated":
             continue
         ra = need.get("review_after", "")
@@ -297,7 +296,7 @@ def cmd_stale(args: argparse.Namespace) -> None:
 
     expired = []
     review_due = []
-    for nid, need in needs.items():
+    for _nid, need in needs.items():
         if need.get("status") == "deprecated":
             continue
         ea = need.get("expires_at", "")
@@ -338,6 +337,7 @@ def cmd_rebuild(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     from .engine import find_needs_json
+
     print(f"needs.json updated at {find_needs_json(workspace)}")
 
     needs = load_needs(workspace)
@@ -365,7 +365,9 @@ def _sort_needs(needs: dict, sort: str | None) -> list[tuple[str, dict]]:
         items.sort(key=lambda x: x[1].get("created_at", ""))
     elif sort == "confidence":
         items.sort(
-            key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(x[1].get("confidence", "medium"), 1)
+            key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(
+                x[1].get("confidence", "medium"), 1
+            )
         )
     elif sort == "updated":
         items.sort(
@@ -384,17 +386,16 @@ def _output(
 ) -> None:
     """Output needs in the requested format."""
     # Apply sorting
-    if sort:
-        sorted_items = _sort_needs(needs, sort)
-    else:
-        sorted_items = list(needs.items())
+    sorted_items = _sort_needs(needs, sort) if sort else list(needs.items())
 
     # Apply limit
     if limit and len(sorted_items) > limit:
         # If no explicit sort, use confidence for limit trimming
         if not sort:
             sorted_items.sort(
-                key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(x[1].get("confidence", "medium"), 1)
+                key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(
+                    x[1].get("confidence", "medium"), 1
+                )
             )
         trimmed_items = sorted_items[:limit]
         omitted = len(sorted_items) - limit
@@ -451,7 +452,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("directory", help="Directory to create the workspace in")
     p_init.add_argument("--name", default="AI Memory Protocol", help="Project name")
     p_init.add_argument("--author", default="bburda", help="Author name")
-    p_init.add_argument("--install", action="store_true", help="Create .venv and install dependencies")
+    p_init.add_argument(
+        "--install", action="store_true", help="Create .venv and install dependencies"
+    )
     p_init.set_defaults(func=cmd_init)
 
     # --- add ---
@@ -467,9 +470,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--body", default="", help="Description text")
     p_add.add_argument("--relates", default="", help="Related memory IDs, comma-separated")
     p_add.add_argument("--supersedes", default="", help="IDs this supersedes, comma-separated")
-    p_add.add_argument("--review-days", type=int, default=30, help="Days until review (default: 30)")
+    p_add.add_argument(
+        "--review-days", type=int, default=30, help="Days until review (default: 30)"
+    )
     p_add.add_argument("--dry-run", action="store_true", help="Print RST without writing")
-    p_add.add_argument("--rebuild", action="store_true", help="Auto-rebuild needs.json after adding")
+    p_add.add_argument(
+        "--rebuild", action="store_true", help="Auto-rebuild needs.json after adding"
+    )
     p_add.set_defaults(func=cmd_add)
 
     # --- recall ---
@@ -477,14 +484,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_recall.add_argument("query", nargs="*", help="Free-text search query (OR logic)")
     p_recall.add_argument("--tag", "-t", help="Filter by tag(s), comma-separated")
     p_recall.add_argument("--type", help="Filter by type (mem/dec/fact/pref/risk/goal/q)")
-    p_recall.add_argument("--expand", "-e", type=int, default=1, help="Graph expansion hops (0=off, default: 1)")
-    p_recall.add_argument("--format", "-f", choices=["context", "compact", "brief", "json"], default="context")
-    p_recall.add_argument("--limit", "-l", type=int, default=0, help="Max results (0=unlimited, default: 0)")
+    p_recall.add_argument(
+        "--expand", "-e", type=int, default=1, help="Graph expansion hops (0=off, default: 1)"
+    )
+    p_recall.add_argument(
+        "--format", "-f", choices=["context", "compact", "brief", "json"], default="context"
+    )
+    p_recall.add_argument(
+        "--limit", "-l", type=int, default=0, help="Max results (0=unlimited, default: 0)"
+    )
     p_recall.add_argument("--body", "-b", action="store_true", help="Include body text in output")
-    p_recall.add_argument("--sort", "-s", choices=["newest", "oldest", "confidence", "updated"],
-                          help="Sort order (newest/oldest by created_at, updated by updated_at)")
-    p_recall.add_argument("--stale", action="store_true",
-                          help="Show only expired or review-overdue memories")
+    p_recall.add_argument(
+        "--sort",
+        "-s",
+        choices=["newest", "oldest", "confidence", "updated"],
+        help="Sort order (newest/oldest by created_at, updated by updated_at)",
+    )
+    p_recall.add_argument(
+        "--stale", action="store_true", help="Show only expired or review-overdue memories"
+    )
     p_recall.set_defaults(func=cmd_recall)
 
     # --- get ---
