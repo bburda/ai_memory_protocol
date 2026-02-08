@@ -108,14 +108,19 @@ Install with MCP extras:
 pipx install -e 'ai_memory_protocol/[mcp]'
 ```
 
-### Claude Desktop
+### Claude Code
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+```bash
+claude mcp add --transport stdio --env MEMORY_DIR=/path/to/.memories memory -- memory-mcp-stdio
+```
+
+Or add to `.mcp.json` in your project root (project scope):
 
 ```json
 {
   "mcpServers": {
     "memory": {
+      "type": "stdio",
       "command": "memory-mcp-stdio",
       "env": {
         "MEMORY_DIR": "/path/to/.memories"
