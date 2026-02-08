@@ -67,7 +67,8 @@ TOOLS: list[Tool] = [
         description=(
             "Search memories by free text query and/or tags. "
             "Returns matching memories formatted for context windows. "
-            "Use this FIRST to check existing knowledge before starting work."
+            "Use format='brief' FIRST to peek at titles, then memory_get to drill into specific IDs. "
+            "Recall at EVERY topic transition: new task, unfamiliar code, before decisions, when stuck — not just session start."
         ),
         inputSchema={
             "type": "object",
@@ -123,8 +124,9 @@ TOOLS: list[Tool] = [
     Tool(
         name="memory_get",
         description=(
-            "Get full details of a specific memory by ID. "
-            "Always shows body text. Use after recall to drill into a specific memory."
+            "Get full details of a specific memory by ID — the DRILL step. "
+            "Always shows body text. Use AFTER memory_recall(format='brief') to read "
+            "the 2-3 most relevant memories. Never skip the peek step."
         ),
         inputSchema={
             "type": "object",
@@ -140,9 +142,12 @@ TOOLS: list[Tool] = [
     Tool(
         name="memory_add",
         description=(
-            "Record a new memory. Use when you discover, decide, or observe something important. "
-            "Always include tags for discoverability. Always include body with enough context "
-            "that a future agent can act on it without re-reading source files."
+            "Record a new memory. You MUST use this at specific trigger points: "
+            "chose approach A over B → dec; fixed non-obvious bug → mem; "
+            "discovered undocumented pattern → fact; user stated preference → pref; "
+            "identified risk → risk; question unanswered → q. "
+            "Also batch-write at end of task: architecture learned → fact, conventions → pref. "
+            "Tags are mandatory. Body must be self-contained with file paths and concrete details."
         ),
         inputSchema={
             "type": "object",

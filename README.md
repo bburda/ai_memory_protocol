@@ -209,17 +209,66 @@ Tags use `prefix:value` format for consistent discovery:
 
 ### Recommended Workflow
 
-1. **RECALL before working** — always check existing knowledge before starting a task
-2. **ADD after learning** — record discoveries, decisions, and observations immediately
-3. **SUPERSEDE, don't edit** — when knowledge changes, add a new memory and deprecate the old one
-4. **CHECK STALENESS periodically** — use `memory stale` to maintain knowledge quality
+#### 1. READ — Peek then Drill (two-phase recall)
+
+Always use a **two-phase** approach. Never go straight to body text on broad queries.
+
+**Phase A — Peek** (scan titles, zero body text):
+```bash
+memory recall --tag topic:gateway --format brief --expand 0
+```
+Returns `[ID] Title (confidence)` one-liners. Minimal tokens. Do this FIRST.
+
+**Phase B — Drill** (read full body of specific memories):
+```bash
+memory get DEC_handler_context_pattern
+```
+Only after peeking — pick the 2-3 most relevant IDs and `get` them individually.
+
+**When to recall** — recall is NOT just a session-start ritual. Recall at each of these moments:
+
+| Trigger | What to recall |
+|---------|---------------|
+| Session start | `recall --format brief --limit 20 --sort newest` |
+| New task or topic | `recall --tag topic:<X> --format brief` |
+| Entering unfamiliar code | `recall --tag repo:<X> --type fact --format brief` |
+| Before a design decision | `recall --tag topic:<X> --type dec` |
+| When stuck or debugging | `recall <error keywords>` |
+| Before implementing a pattern | `recall --tag intent:coding-style --type pref` |
+
+#### 2. WRITE — Record at specific trigger points
+
+Recording memories is NOT optional. Write at these concrete moments:
+
+| Trigger | Type | Example |
+|---------|------|---------|
+| Chose approach A over B | `dec` | "Use tl::expected over exceptions" |
+| Fixed a non-obvious bug | `mem` | "EntityCache race condition fix" |
+| Discovered undocumented API | `fact` | "Routes match in registration order" |
+| User stated a preference | `pref` | "Prefer Zustand over Redux" |
+| Identified a risk | `risk` | "JWT secret hardcoded in tests" |
+| Question remains unanswered | `q` | "Should synthetic components expose operations?" |
+
+**End-of-task writes**: summarize architecture learned (`fact`), record conventions (`pref`), note anything a future agent needs (`mem`), capture unfinished goals (`goal`).
+
+**Write quality rules**:
+- `--tags` is mandatory — without tags, the memory is unfindable
+- `--body` must be self-contained with file paths and concrete details
+- Use `--rebuild` flag to make new memories immediately searchable
+
+#### 3. SUPERSEDE, don't edit
+
+When knowledge changes, add a new entry with `--supersedes OLD_ID` and deprecate the old one.
+
+#### 4. CHECK STALENESS periodically
+
+Run `memory stale` at the start of long sessions to keep the graph accurate.
 
 ### Context Window Optimization
 
-- Default `recall` omits body text — use `memory get <ID>` only when you need details
-- Use `--format brief` for initial scanning, then drill into specific IDs
-- Use `--limit 10` when exploring broad topics
-- Use `--expand 0` to skip graph expansion for exact matches only
+- `recall` omits body by default — this is intentional, not a limitation
+- **Peek** with `--format brief` → **drill** with `get <ID>` — this is the core pattern
+- Use `--limit 10` and `--expand 0` when exploring broad topics
 - Use `--tag` filters to narrow results instead of free-text
 - Use `memory tags` to discover available tag prefixes before filtering
 
