@@ -180,18 +180,26 @@ def find_sphinx_build(workspace: Path) -> str:
     """Locate the sphinx-build executable.
 
     Search order:
-      1. ``workspace/.venv/bin/sphinx-build``
-      2. Walk parent directories for ``.venv/bin/sphinx-build``
-      3. ``shutil.which("sphinx-build")`` (system PATH)
+      1. Same directory as the running Python interpreter (covers pipx / venv installs)
+      2. ``workspace/.venv/bin/sphinx-build``
+      3. Walk parent directories for ``.venv/bin/sphinx-build``
+      4. ``shutil.which("sphinx-build")`` (system PATH)
 
     Returns the path string, or raises ``FileNotFoundError``.
     """
-    # 1. Workspace venv
+    # 1. Running Python's own environment (pipx, venv, conda, etc.)
+    #    Use parent of sys.executable WITHOUT resolving symlinks, so that
+    #    pipx/venv wrapper scripts point to the correct bin directory.
+    own_bin = Path(sys.executable).parent / "sphinx-build"
+    if own_bin.exists():
+        return str(own_bin)
+
+    # 2. Workspace venv
     candidate = workspace / ".venv" / "bin" / "sphinx-build"
     if candidate.exists():
         return str(candidate)
 
-    # 2. Walk parent directories
+    # 3. Walk parent directories
     for parent in workspace.parents:
         candidate = parent / ".venv" / "bin" / "sphinx-build"
         if candidate.exists():
@@ -205,7 +213,7 @@ def find_sphinx_build(workspace: Path) -> str:
                         return str(candidate)
             break  # Only check immediate parent's siblings
 
-    # 3. System PATH
+    # 4. System PATH
     system = shutil.which("sphinx-build")
     if system:
         return system
