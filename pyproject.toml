@@ -1,0 +1,42 @@
+[project]
+name = "ai-memory-protocol"
+version = "0.2.0"
+description = "AI Memory Protocol — versioned, graph-based memory for AI agents using Sphinx-Needs"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [{ name = "bburda" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Documentation",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "sphinx>=7.0,<9",
+    "sphinx-needs>=4.0",
+    "sphinxcontrib-plantuml>=0.30",
+    "sphinx-rtd-theme>=2.0",
+    "sphinx-design>=0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/bburda/ai_memory_protocol"
+Repository = "https://github.com/bburda/ai_memory_protocol"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+memory = "ai_memory_protocol.cli:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "pytest>=8.0",
+]
