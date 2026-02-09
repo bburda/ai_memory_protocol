@@ -20,7 +20,6 @@ from ai_memory_protocol.capture import (
     format_candidates,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -339,17 +338,19 @@ class TestCaptureFromGit:
                 files=["src/server.cpp"],
             ),
         ]
-        with patch("ai_memory_protocol.capture._parse_git_log", return_value=mock_commits):
-            with patch("ai_memory_protocol.capture.load_needs", return_value={}):
-                candidates = capture_from_git(
-                    workspace=tmp_workspace,
-                    repo_path=Path("/fake/repo"),
-                    repo_name="ros2_medkit",
-                )
-                assert len(candidates) == 1
-                assert candidates[0].type == "mem"
-                assert "timeout" in candidates[0].title.lower()
-                assert "repo:ros2_medkit" in candidates[0].tags
+        with (
+            patch("ai_memory_protocol.capture._parse_git_log", return_value=mock_commits),
+            patch("ai_memory_protocol.capture.load_needs", return_value={}),
+        ):
+            candidates = capture_from_git(
+                workspace=tmp_workspace,
+                repo_path=Path("/fake/repo"),
+                repo_name="ros2_medkit",
+            )
+            assert len(candidates) == 1
+            assert candidates[0].type == "mem"
+            assert "timeout" in candidates[0].title.lower()
+            assert "repo:ros2_medkit" in candidates[0].tags
 
     def test_dedup_filters_existing(self, tmp_workspace):
         mock_commits = [
@@ -369,14 +370,16 @@ class TestCaptureFromGit:
                 "source": "",
             },
         }
-        with patch("ai_memory_protocol.capture._parse_git_log", return_value=mock_commits):
-            with patch("ai_memory_protocol.capture.load_needs", return_value=existing_needs):
-                candidates = capture_from_git(
-                    workspace=tmp_workspace,
-                    repo_path=Path("/fake/repo"),
-                    deduplicate=True,
-                )
-                assert len(candidates) == 0
+        with (
+            patch("ai_memory_protocol.capture._parse_git_log", return_value=mock_commits),
+            patch("ai_memory_protocol.capture.load_needs", return_value=existing_needs),
+        ):
+            candidates = capture_from_git(
+                workspace=tmp_workspace,
+                repo_path=Path("/fake/repo"),
+                deduplicate=True,
+            )
+            assert len(candidates) == 0
 
     def test_min_confidence_filters(self, tmp_workspace):
         mock_commits = [
@@ -389,14 +392,16 @@ class TestCaptureFromGit:
                 files=[],
             ),
         ]
-        with patch("ai_memory_protocol.capture._parse_git_log", return_value=mock_commits):
-            with patch("ai_memory_protocol.capture.load_needs", return_value={}):
-                candidates = capture_from_git(
-                    workspace=tmp_workspace,
-                    repo_path=Path("/fake/repo"),
-                    min_confidence="medium",
-                )
-                assert len(candidates) == 0  # chore → low confidence, filtered out
+        with (
+            patch("ai_memory_protocol.capture._parse_git_log", return_value=mock_commits),
+            patch("ai_memory_protocol.capture.load_needs", return_value={}),
+        ):
+            candidates = capture_from_git(
+                workspace=tmp_workspace,
+                repo_path=Path("/fake/repo"),
+                min_confidence="medium",
+            )
+            assert len(candidates) == 0  # chore → low confidence, filtered out
 
 
 # ---------------------------------------------------------------------------

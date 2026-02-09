@@ -8,12 +8,12 @@ import pytest
 
 try:
     from ai_memory_protocol.mcp_server import (
-        TOOLS,
         _MCP_AVAILABLE,
+        TOOLS,
         _format_output,
         _sort_needs,
         create_mcp_server,
-    )
+    )  # noqa: I001
 
     MCP_AVAILABLE = _MCP_AVAILABLE
 except ImportError:

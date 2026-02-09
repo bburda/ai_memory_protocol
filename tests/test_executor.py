@@ -13,8 +13,10 @@ from ai_memory_protocol.executor import (
     validate_actions,
 )
 from ai_memory_protocol.planner import Action
-from ai_memory_protocol.rst import append_to_rst, generate_rst_directive
-
+from ai_memory_protocol.rst import (
+    append_to_rst,
+    generate_rst_directive,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -24,7 +26,7 @@ from ai_memory_protocol.rst import append_to_rst, generate_rst_directive
 @pytest.fixture
 def workspace_with_memories(tmp_workspace: Path) -> Path:
     """Workspace with a few memories already added."""
-    for i, (mid, title, tags) in enumerate(
+    for _, (mid, title, tags) in enumerate(
         [
             ("MEM_alpha", "Alpha observation", ["topic:test", "repo:demo"]),
             ("MEM_beta", "Beta observation", ["topic:test", "repo:demo"]),
