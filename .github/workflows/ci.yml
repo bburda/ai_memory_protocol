@@ -29,12 +29,12 @@ jobs:
           pip install ruff
 
       - name: Lint with ruff
-        run: ruff check src/
+        run: ruff check src/ tests/
 
       - name: Format check with ruff
-        run: ruff format --check src/
+        run: ruff format --check src/ tests/
 
-  test:
+  test-unit:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -47,8 +47,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install package
-        run: pip install -e .
+      - name: Install package + test deps
+        run: pip install -e '.[mcp]' pytest pytest-cov
 
       - name: Verify CLI entry point
         run: memory --version
@@ -61,8 +61,37 @@ jobs:
           python -c "from ai_memory_protocol.formatter import format_brief"
           python -c "from ai_memory_protocol.rst import generate_rst_directive"
           python -c "from ai_memory_protocol.config import TYPE_FILES"
+          python -c "from ai_memory_protocol.mcp_server import create_mcp_server; create_mcp_server()"
 
-      - name: Test init + add + rebuild workflow
+      - name: Run unit tests
+        run: pytest tests/ -v -m "not integration" --cov=ai_memory_protocol --cov-report=term-missing
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  test-integration:
+    runs-on: ubuntu-latest
+    needs: [test-unit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install -e '.[mcp]' pytest
+
+      - name: Run integration tests
+        run: pytest tests/ -v -m integration --timeout=120
+        continue-on-error: true
+
+      - name: Run workflow smoke test
         run: |
           memory init /tmp/test-memory --name "CI Test" --install
           memory --dir /tmp/test-memory add fact "CI test fact" \
@@ -74,9 +103,11 @@ jobs:
           memory --dir /tmp/test-memory get FACT_ci_test_fact
           memory --dir /tmp/test-memory tags
           memory --dir /tmp/test-memory list
+          memory --dir /tmp/test-memory doctor
 
   test-mcp:
     runs-on: ubuntu-latest
+    needs: [test-unit]
     steps:
       - uses: actions/checkout@v4
 
@@ -86,9 +117,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install package with MCP extras
-        run: pip install -e '.[mcp]'
+        run: pip install -e '.[mcp]' pytest
 
       - name: Verify MCP server imports
         run: |
           python -c "from ai_memory_protocol.mcp_server import create_mcp_server; create_mcp_server()"
           python -c "from ai_memory_protocol.mcp_server import TOOLS; print(f'{len(TOOLS)} MCP tools registered')"
+
+      - name: Run MCP tests
+        run: pytest tests/test_mcp_server.py -v
