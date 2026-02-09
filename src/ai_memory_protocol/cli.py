@@ -27,6 +27,7 @@ from datetime import date
 from pathlib import Path
 
 from . import __version__
+from .capture import capture_from_git, format_candidates
 from .config import TYPE_FILES
 from .engine import (
     expand_graph,
@@ -37,7 +38,9 @@ from .engine import (
     tag_match,
     text_match,
 )
+from .executor import actions_from_json, execute_plan
 from .formatter import format_brief, format_compact, format_context_pack, format_full
+from .planner import format_plan, run_plan
 from .rst import (
     add_tags_in_rst,
     append_to_rst,
@@ -48,9 +51,6 @@ from .rst import (
     update_field_in_rst,
 )
 from .scaffold import init_workspace
-from .planner import format_plan, run_plan
-from .executor import actions_from_json, execute_plan
-from .capture import capture_from_git, format_candidates
 
 # ---------------------------------------------------------------------------
 # Doctor checks

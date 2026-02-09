@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from ai_memory_protocol.config import TYPE_PREFIXES
 from ai_memory_protocol.rst import (
     add_tags_in_rst,

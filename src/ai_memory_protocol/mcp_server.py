@@ -32,7 +32,7 @@ except ImportError:
     TextContent = None  # type: ignore[assignment,misc]
     Tool = None  # type: ignore[assignment,misc]
 
-from .engine import (
+from .engine import (  # noqa: E402
     expand_graph,
     find_workspace,
     load_needs,
@@ -41,8 +41,13 @@ from .engine import (
     tag_match,
     text_match,
 )
-from .formatter import format_brief, format_compact, format_context_pack, format_full
-from .rst import (
+from .formatter import (  # noqa: E402
+    format_brief,
+    format_compact,
+    format_context_pack,
+    format_full,
+)
+from .rst import (  # noqa: E402
     add_tags_in_rst,
     append_to_rst,
     deprecate_in_rst,

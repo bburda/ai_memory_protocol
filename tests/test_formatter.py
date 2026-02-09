@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from ai_memory_protocol.formatter import (
     format_brief,
     format_compact,
