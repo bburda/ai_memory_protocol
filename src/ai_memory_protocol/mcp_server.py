@@ -15,12 +15,22 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
 
-from mcp.server import Server
-from mcp.types import TextContent, Tool
+# Lazy MCP import — provide helpful error instead of ImportError crash
+_MCP_AVAILABLE = False
+try:
+    from mcp.server import Server
+    from mcp.types import TextContent, Tool
+
+    _MCP_AVAILABLE = True
+except ImportError:
+    Server = None  # type: ignore[assignment,misc]
+    TextContent = None  # type: ignore[assignment,misc]
+    Tool = None  # type: ignore[assignment,misc]
 
 from .engine import (
     expand_graph,
@@ -51,6 +61,13 @@ logger = logging.getLogger(__name__)
 
 def create_mcp_server(name: str = "ai-memory-protocol") -> Server:
     """Create and configure the MCP server with all memory tools."""
+    if not _MCP_AVAILABLE:
+        raise ImportError(
+            "MCP SDK not installed. Install with:\n"
+            "  pipx install -e 'ai_memory_protocol/[mcp]'\n"
+            "Or if already installed via pipx:\n"
+            "  pipx inject ai-memory-protocol mcp\n"
+        )
     server = Server(name)
     _register_tools(server)
     _register_handlers(server)
@@ -61,25 +78,39 @@ def create_mcp_server(name: str = "ai-memory-protocol") -> Server:
 # Tool definitions
 # ---------------------------------------------------------------------------
 
-TOOLS: list[Tool] = [
+
+def _build_tools() -> list:
+    """Build tool definitions. Returns empty list if MCP SDK not available."""
+    if not _MCP_AVAILABLE:
+        return []
+    return [
     Tool(
         name="memory_recall",
         description=(
             "Search memories by free text query and/or tags. "
             "Returns matching memories formatted for context windows. "
-            "Use format='brief' FIRST to peek at titles, then memory_get to drill into specific IDs. "
-            "Recall at EVERY topic transition: new task, unfamiliar code, before decisions, when stuck — not just session start."
+            "Use format='brief' FIRST to peek at titles, "
+            "then memory_get to drill into specific IDs. "
+            "Recall at EVERY topic transition: new task, "
+            "unfamiliar code, before decisions, when stuck "
+            "— not just session start."
         ),
         inputSchema={
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Free-text search query (OR logic across words). Optional if tag is provided.",
+                    "description": (
+                        "Free-text search query (OR logic across words). "
+                        "Optional if tag is provided."
+                    ),
                 },
                 "tag": {
                     "type": "string",
-                    "description": "Comma-separated tag filters (AND logic). E.g. 'topic:gateway,repo:ros2_medkit'.",
+                    "description": (
+                        "Comma-separated tag filters (AND logic). "
+                        "E.g. 'topic:gateway,repo:ros2_medkit'."
+                    ),
                 },
                 "type": {
                     "type": "string",
@@ -88,7 +119,11 @@ TOOLS: list[Tool] = [
                 },
                 "format": {
                     "type": "string",
-                    "description": "Output format: brief (minimal tokens), compact (one-liner), context (grouped by type, default), json.",
+                    "description": (
+                        "Output format: brief (minimal tokens), "
+                        "compact (one-liner), context (grouped by "
+                        "type, default), json."
+                    ),
                     "enum": ["brief", "compact", "context", "json"],
                     "default": "context",
                 },
@@ -109,7 +144,10 @@ TOOLS: list[Tool] = [
                 },
                 "expand": {
                     "type": "integer",
-                    "description": "Graph expansion hops from matched memories. 0 = exact matches only. Default 1.",
+                    "description": (
+                        "Graph expansion hops from matched memories. "
+                        "0 = exact matches only. Default 1."
+                    ),
                     "default": 1,
                 },
                 "stale": {
@@ -163,7 +201,10 @@ TOOLS: list[Tool] = [
                 },
                 "tags": {
                     "type": "string",
-                    "description": "Comma-separated tags in prefix:value format. E.g. 'topic:api,repo:backend'.",
+                    "description": (
+                        "Comma-separated tags in prefix:value format. "
+                        "E.g. 'topic:api,repo:backend'."
+                    ),
                 },
                 "body": {
                     "type": "string",
@@ -292,7 +333,10 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="memory_stale",
-        description="Show expired or review-overdue memories. Use periodically to keep the memory graph fresh.",
+        description=(
+            "Show expired or review-overdue memories. "
+            "Use periodically to keep the memory graph fresh."
+        ),
         inputSchema={
             "type": "object",
             "properties": {},
@@ -311,7 +355,118 @@ TOOLS: list[Tool] = [
             "required": [],
         },
     ),
-]
+    Tool(
+        name="memory_plan",
+        description=(
+            "Analyze memory graph and return planned maintenance actions (no modifications). "
+            "Checks for duplicates, missing tags, stale entries, conflicts, tag normalization, "
+            "and oversized files. Returns a list of proposed actions."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "checks": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "duplicates",
+                            "missing_tags",
+                            "stale",
+                            "conflicts",
+                            "tag_normalize",
+                            "split_files",
+                        ],
+                    },
+                    "description": "Which checks to run. Default: all.",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["human", "json"],
+                    "default": "human",
+                    "description": "Output format. 'json' for machine-readable actions.",
+                },
+            },
+            "required": [],
+        },
+    ),
+    Tool(
+        name="memory_apply",
+        description=(
+            "Execute a list of planned memory actions, rebuild, and validate. "
+            "Includes git-based rollback on build failure. Pass actions from memory_plan output."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Actions from memory_plan output (JSON format).",
+                },
+                "auto_commit": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Commit changes to git after successful apply.",
+                },
+            },
+            "required": ["actions"],
+        },
+    ),
+    Tool(
+        name="memory_capture_git",
+        description=(
+            "Analyze git log and generate memory candidates from commit history. "
+            "Classifies commits by conventional commit prefix "
+            "and deduplicates against existing memories."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "repo_path": {
+                    "type": "string",
+                    "description": "Path to git repository. Default: current directory.",
+                },
+                "since": {
+                    "type": "string",
+                    "default": "HEAD~20",
+                    "description": "Start of range (commit ref or date like '2 weeks ago').",
+                },
+                "until": {
+                    "type": "string",
+                    "default": "HEAD",
+                    "description": "End of range.",
+                },
+                "repo_name": {
+                    "type": "string",
+                    "description": "Repository name for repo: tags. Auto-detected if omitted.",
+                },
+                "min_confidence": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high"],
+                    "default": "low",
+                    "description": "Minimum confidence to include.",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["human", "json"],
+                    "default": "human",
+                    "description": "Output format.",
+                },
+                "auto_add": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Automatically add candidates to workspace.",
+                },
+            },
+            "required": [],
+        },
+    ),
+    ]
+
+
+# Module-level TOOLS — populated lazily so the module can be imported without MCP SDK
+TOOLS: list = _build_tools()
 
 
 def _register_tools(server: Server) -> None:
@@ -428,6 +583,12 @@ def _register_handlers(server: Server) -> None:
                 return _handle_stale(arguments)
             elif name == "memory_rebuild":
                 return _handle_rebuild(arguments)
+            elif name == "memory_plan":
+                return _handle_plan(arguments)
+            elif name == "memory_apply":
+                return _handle_apply(arguments)
+            elif name == "memory_capture_git":
+                return _handle_capture_git(arguments)
             else:
                 return _text_response(f"Unknown tool: {name}")
         except SystemExit as e:
@@ -663,6 +824,68 @@ def _handle_rebuild(args: dict[str, Any]) -> list[TextContent]:
     return _text_response(result)
 
 
+def _handle_plan(args: dict[str, Any]) -> list[TextContent]:
+    from .planner import format_plan, run_plan
+
+    workspace = _get_workspace()
+    checks = args.get("checks")  # list[str] or None
+    fmt = args.get("format", "human")
+    actions = run_plan(workspace, checks=checks)
+    output = format_plan(actions, fmt=fmt)
+    return _text_response(output)
+
+
+def _handle_apply(args: dict[str, Any]) -> list[TextContent]:
+    from .executor import actions_from_json, execute_plan
+
+    workspace = _get_workspace()
+    raw_actions = args.get("actions", [])
+    auto_commit = args.get("auto_commit", False)
+    actions = actions_from_json(raw_actions)
+    result = execute_plan(workspace, actions, auto_commit=auto_commit)
+    return _text_response(result.summary())
+
+
+def _handle_capture_git(args: dict[str, Any]) -> list[TextContent]:
+    from .capture import capture_from_git, format_candidates
+    from .rst import append_to_rst, generate_rst_directive
+
+    workspace = _get_workspace()
+    repo_path = Path(args.get("repo_path", ".")).resolve()
+    candidates = capture_from_git(
+        workspace=workspace,
+        repo_path=repo_path,
+        since=args.get("since", "HEAD~20"),
+        until=args.get("until", "HEAD"),
+        repo_name=args.get("repo_name"),
+        min_confidence=args.get("min_confidence", "low"),
+    )
+
+    output_lines: list[str] = []
+    fmt = args.get("format", "human")
+    output_lines.append(format_candidates(candidates, fmt=fmt))
+
+    if args.get("auto_add", False) and candidates:
+        count = 0
+        for c in candidates:
+            directive = generate_rst_directive(
+                mem_type=c.type,
+                title=c.title,
+                tags=c.tags,
+                source=c.source,
+                confidence=c.confidence,
+                scope=c.scope,
+                body=c.body,
+            )
+            append_to_rst(workspace, c.type, directive)
+            count += 1
+        output_lines.append(f"\nAdded {count} memories to workspace.")
+        success, msg = run_rebuild(workspace)
+        output_lines.append(msg)
+
+    return _text_response("\n".join(output_lines))
+
+
 # ---------------------------------------------------------------------------
 # Entry points
 # ---------------------------------------------------------------------------
@@ -670,6 +893,17 @@ def _handle_rebuild(args: dict[str, Any]) -> list[TextContent]:
 
 def main_stdio() -> None:
     """Run the MCP server over stdio transport."""
+    if not _MCP_AVAILABLE:
+        print(
+            "ERROR: MCP SDK not installed.\n"
+            "Install with:\n"
+            "  pipx install -e 'ai_memory_protocol/[mcp]'\n"
+            "Or if already installed via pipx:\n"
+            "  pipx inject ai-memory-protocol mcp",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     import asyncio
 
     from mcp.server.stdio import stdio_server
