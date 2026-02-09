@@ -48,6 +48,9 @@ from .rst import (
     update_field_in_rst,
 )
 from .scaffold import init_workspace
+from .planner import format_plan, run_plan
+from .executor import actions_from_json, execute_plan
+from .capture import capture_from_git, format_candidates
 
 # ---------------------------------------------------------------------------
 # Doctor checks
@@ -162,6 +165,38 @@ def cmd_init(args: argparse.Namespace) -> None:
         author=args.author,
         install_deps=args.install,
     )
+
+
+def cmd_doctor(args: argparse.Namespace) -> None:
+    """Run installation health checks."""
+    ws_dir = getattr(args, "dir", None)
+    checks = [
+        ("CLI entry point", lambda: _check_cli()),
+        ("Workspace exists", lambda: _check_workspace(ws_dir)),
+        ("Sphinx-build available", lambda: _check_sphinx_build(ws_dir)),
+        ("needs.json loadable", lambda: _check_needs_json(ws_dir)),
+        ("MCP SDK installed", lambda: _check_mcp_importable()),
+        ("MCP server creatable", lambda: _check_mcp_server()),
+        ("RST files parseable", lambda: _check_rst_files(ws_dir)),
+    ]
+    all_ok = True
+    print("AI Memory Protocol — Health Check\n")
+    for name, check_fn in checks:
+        try:
+            ok, detail = check_fn()
+            status = "\u2713" if ok else "\u2717"
+            print(f"  {status} {name}: {detail}")
+            if not ok:
+                all_ok = False
+        except Exception as e:
+            print(f"  \u2717 {name}: CRASH — {e}")
+            all_ok = False
+    print()
+    if all_ok:
+        print("All checks passed.")
+    else:
+        print("Some checks failed. See details above.")
+        sys.exit(1)
 
 
 def cmd_add(args: argparse.Namespace) -> None:
@@ -439,35 +474,92 @@ def cmd_rebuild(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def cmd_doctor(args: argparse.Namespace) -> None:
-    """Run installation health checks."""
-    ws_dir = getattr(args, "dir", None)
-    checks = [
-        ("CLI entry point", lambda: _check_cli()),
-        ("Workspace exists", lambda: _check_workspace(ws_dir)),
-        ("Sphinx-build available", lambda: _check_sphinx_build(ws_dir)),
-        ("needs.json loadable", lambda: _check_needs_json(ws_dir)),
-        ("MCP SDK installed", lambda: _check_mcp_importable()),
-        ("MCP server creatable", lambda: _check_mcp_server()),
-        ("RST files parseable", lambda: _check_rst_files(ws_dir)),
-    ]
-    all_ok = True
-    print("AI Memory Protocol — Health Check\n")
-    for name, check_fn in checks:
-        try:
-            ok, detail = check_fn()
-            status = "\u2713" if ok else "\u2717"
-            print(f"  {status} {name}: {detail}")
-            if not ok:
-                all_ok = False
-        except Exception as e:
-            print(f"  \u2717 {name}: CRASH — {e}")
-            all_ok = False
-    print()
-    if all_ok:
-        print("All checks passed.")
+def cmd_plan(args: argparse.Namespace) -> None:
+    """Analyze memory graph and generate a maintenance plan."""
+    workspace = find_workspace(args.dir)
+    checks = [c.strip() for c in args.checks.split(",")] if args.checks else None
+    actions = run_plan(workspace, checks=checks)
+    fmt = args.format
+    print(format_plan(actions, fmt=fmt))
+
+
+def cmd_apply(args: argparse.Namespace) -> None:
+    """Execute a list of planned actions from a JSON file."""
+    workspace = find_workspace(args.dir)
+
+    if args.file:
+        import json as json_mod
+
+        data = json_mod.loads(Path(args.file).read_text())
+        actions = actions_from_json(data)
+    elif args.plan:
+        # Run plan first, then apply
+        checks = [c.strip() for c in args.plan.split(",")] if args.plan != "all" else None
+        actions_list = run_plan(workspace, checks=checks)
+        if not actions_list:
+            print("No issues found — nothing to apply.")
+            return
+        print(format_plan(actions_list, fmt="human"))
+        if not args.yes:
+            answer = input(f"\nApply {len(actions_list)} action(s)? [y/N] ")
+            if answer.lower() not in ("y", "yes"):
+                print("Aborted.")
+                return
+        actions = actions_list
     else:
-        print("Some checks failed. See details above.")
+        print("Provide --file <actions.json> or --plan [checks] to generate and apply.")
+        sys.exit(1)
+
+    result = execute_plan(
+        workspace,
+        actions,
+        auto_commit=args.auto_commit,
+        rebuild=not args.no_rebuild,
+    )
+    print(result.summary())
+    if not result.success:
+        sys.exit(1)
+
+
+def cmd_capture(args: argparse.Namespace) -> None:
+    """Capture memory candidates from external sources."""
+    workspace = find_workspace(args.dir)
+
+    if args.source == "git":
+        repo_path = Path(args.repo).resolve() if args.repo else Path.cwd()
+        candidates = capture_from_git(
+            workspace=workspace,
+            repo_path=repo_path,
+            since=args.since,
+            until=args.until,
+            repo_name=args.repo_name,
+            min_confidence=args.min_confidence,
+        )
+        print(format_candidates(candidates, fmt=args.format))
+
+        if args.auto_add and candidates:
+            from .rst import append_to_rst, generate_rst_directive
+
+            count = 0
+            for c in candidates:
+                directive = generate_rst_directive(
+                    mem_type=c.type,
+                    title=c.title,
+                    tags=c.tags,
+                    source=c.source,
+                    confidence=c.confidence,
+                    scope=c.scope,
+                    body=c.body,
+                )
+                append_to_rst(workspace, c.type, directive)
+                count += 1
+            print(f"\nAdded {count} memories to workspace.")
+            if not args.no_rebuild:
+                success, message = run_rebuild(workspace)
+                print(message)
+    else:
+        print(f"Unknown capture source: {args.source}")
+        print("Supported sources: git")
         sys.exit(1)
 
 
@@ -682,6 +774,102 @@ def build_parser() -> argparse.ArgumentParser:
     # --- doctor ---
     p_doctor = sub.add_parser("doctor", help="Run installation health checks")
     p_doctor.set_defaults(func=cmd_doctor)
+
+    # --- plan ---
+    p_plan = sub.add_parser("plan", help="Analyze memory graph and generate maintenance plan")
+    p_plan.add_argument(
+        "--checks",
+        help=(
+            "Comma-separated checks to run. "
+            "Options: duplicates, missing_tags, stale, conflicts, tag_normalize, split_files. "
+            "Default: all."
+        ),
+    )
+    p_plan.add_argument(
+        "--format",
+        "-f",
+        choices=["human", "json"],
+        default="human",
+        help="Output format (default: human)",
+    )
+    p_plan.set_defaults(func=cmd_plan)
+
+    # --- apply ---
+    p_apply = sub.add_parser("apply", help="Execute planned maintenance actions")
+    p_apply.add_argument("--file", help="JSON file containing actions to apply")
+    p_apply.add_argument(
+        "--plan",
+        nargs="?",
+        const="all",
+        help="Run plan first, then apply. Optionally specify checks (comma-separated).",
+    )
+    p_apply.add_argument(
+        "--auto-commit",
+        action="store_true",
+        help="Commit changes to git after successful apply",
+    )
+    p_apply.add_argument(
+        "--no-rebuild",
+        action="store_true",
+        help="Skip Sphinx rebuild after applying",
+    )
+    p_apply.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Skip confirmation prompt when using --plan",
+    )
+    p_apply.set_defaults(func=cmd_apply)
+
+    # --- capture ---
+    p_capture = sub.add_parser("capture", help="Capture memories from external sources")
+    p_capture.add_argument(
+        "source",
+        choices=["git"],
+        help="Capture source type",
+    )
+    p_capture.add_argument(
+        "--repo",
+        help="Path to git repository (default: current directory)",
+    )
+    p_capture.add_argument(
+        "--repo-name",
+        help="Repository name for repo: tags (auto-detected from path if omitted)",
+    )
+    p_capture.add_argument(
+        "--since",
+        default="HEAD~20",
+        help="Start of git range (commit ref or date like '2 weeks ago'). Default: HEAD~20",
+    )
+    p_capture.add_argument(
+        "--until",
+        default="HEAD",
+        help="End of git range. Default: HEAD",
+    )
+    p_capture.add_argument(
+        "--min-confidence",
+        choices=["low", "medium", "high"],
+        default="low",
+        help="Minimum confidence to include (default: low)",
+    )
+    p_capture.add_argument(
+        "--format",
+        "-f",
+        choices=["human", "json"],
+        default="human",
+        help="Output format (default: human)",
+    )
+    p_capture.add_argument(
+        "--auto-add",
+        action="store_true",
+        help="Automatically add candidates to workspace (skip review)",
+    )
+    p_capture.add_argument(
+        "--no-rebuild",
+        action="store_true",
+        help="Skip rebuild after auto-add",
+    )
+    p_capture.set_defaults(func=cmd_capture)
 
     return parser
 
