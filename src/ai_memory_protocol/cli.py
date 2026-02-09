@@ -50,6 +50,105 @@ from .rst import (
 from .scaffold import init_workspace
 
 # ---------------------------------------------------------------------------
+# Doctor checks
+# ---------------------------------------------------------------------------
+
+
+def _check_cli() -> tuple[bool, str]:
+    """Verify CLI entry point works."""
+    from . import __version__
+
+    return True, f"v{__version__}"
+
+
+def _check_workspace(workspace_dir: str | None) -> tuple[bool, str]:
+    """Verify workspace exists and is valid."""
+    try:
+        ws = find_workspace(workspace_dir)
+        return True, str(ws)
+    except SystemExit as e:
+        return False, f"{e} — Run: memory init <path>"
+
+
+def _check_sphinx_build(workspace_dir: str | None) -> tuple[bool, str]:
+    """Verify sphinx-build is discoverable."""
+    from .engine import find_sphinx_build
+
+    try:
+        ws = find_workspace(workspace_dir)
+    except SystemExit:
+        return False, "Workspace not found (skipped)"
+    try:
+        sb = find_sphinx_build(ws)
+        return True, sb
+    except FileNotFoundError as e:
+        return False, f"Not found — {e}"
+
+
+def _check_needs_json(workspace_dir: str | None) -> tuple[bool, str]:
+    """Verify needs.json is loadable."""
+    from .engine import find_needs_json
+
+    try:
+        ws = find_workspace(workspace_dir)
+    except SystemExit:
+        return False, "Workspace not found (skipped)"
+    path = find_needs_json(ws)
+    if not path.exists():
+        return False, f"Not found at {path} — Run: memory rebuild"
+    try:
+        needs = load_needs(ws)
+        return True, f"{len(needs)} memories loaded"
+    except (SystemExit, Exception) as e:
+        return False, f"Failed to load: {e}"
+
+
+def _check_mcp_importable() -> tuple[bool, str]:
+    """Verify MCP SDK is installed."""
+    try:
+        import mcp  # noqa: F401
+
+        return True, f"v{getattr(mcp, '__version__', '?')}"
+    except ImportError:
+        return False, "Not installed — Run: pipx inject ai-memory-protocol mcp"
+
+
+def _check_mcp_server() -> tuple[bool, str]:
+    """Verify MCP server can be created."""
+    try:
+        from .mcp_server import create_mcp_server
+
+        create_mcp_server()
+        return True, "Server created successfully"
+    except ImportError as e:
+        return False, f"MCP SDK missing: {e}"
+    except Exception as e:
+        return False, f"Failed: {e}"
+
+
+def _check_rst_files(workspace_dir: str | None) -> tuple[bool, str]:
+    """Verify RST files exist and are parseable."""
+    try:
+        ws = find_workspace(workspace_dir)
+    except SystemExit:
+        return False, "Workspace not found (skipped)"
+    memory_dir = ws / "memory"
+    if not memory_dir.exists():
+        return False, f"No memory/ directory in {ws}"
+    rst_files = list(memory_dir.glob("*.rst"))
+    if not rst_files:
+        return False, "No RST files found in memory/"
+    errors = []
+    for f in rst_files:
+        try:
+            f.read_text()
+        except Exception as e:
+            errors.append(f"{f.name}: {e}")
+    if errors:
+        return False, f"{len(errors)} unreadable files: {'; '.join(errors)}"
+    return True, f"{len(rst_files)} RST files OK"
+
+# ---------------------------------------------------------------------------
 # Subcommands
 # ---------------------------------------------------------------------------
 
@@ -340,6 +439,38 @@ def cmd_rebuild(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_doctor(args: argparse.Namespace) -> None:
+    """Run installation health checks."""
+    ws_dir = getattr(args, "dir", None)
+    checks = [
+        ("CLI entry point", lambda: _check_cli()),
+        ("Workspace exists", lambda: _check_workspace(ws_dir)),
+        ("Sphinx-build available", lambda: _check_sphinx_build(ws_dir)),
+        ("needs.json loadable", lambda: _check_needs_json(ws_dir)),
+        ("MCP SDK installed", lambda: _check_mcp_importable()),
+        ("MCP server creatable", lambda: _check_mcp_server()),
+        ("RST files parseable", lambda: _check_rst_files(ws_dir)),
+    ]
+    all_ok = True
+    print("AI Memory Protocol — Health Check\n")
+    for name, check_fn in checks:
+        try:
+            ok, detail = check_fn()
+            status = "\u2713" if ok else "\u2717"
+            print(f"  {status} {name}: {detail}")
+            if not ok:
+                all_ok = False
+        except Exception as e:
+            print(f"  \u2717 {name}: CRASH — {e}")
+            all_ok = False
+    print()
+    if all_ok:
+        print("All checks passed.")
+    else:
+        print("Some checks failed. See details above.")
+        sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -547,6 +678,10 @@ def build_parser() -> argparse.ArgumentParser:
     # --- rebuild ---
     p_rebuild = sub.add_parser("rebuild", help="Rebuild needs.json from RST sources")
     p_rebuild.set_defaults(func=cmd_rebuild)
+
+    # --- doctor ---
+    p_doctor = sub.add_parser("doctor", help="Run installation health checks")
+    p_doctor.set_defaults(func=cmd_doctor)
 
     return parser
 
