@@ -44,6 +44,7 @@ memory-mcp-stdio = "ai_memory_protocol.mcp_server:main_stdio"
 dev = [
     "ruff>=0.8",
     "pytest>=8.0",
+    "pytest-cov>=6.0",
     "pre-commit>=4.0",
 ]
 
@@ -71,3 +72,7 @@ known-first-party = ["ai_memory_protocol"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: marks tests that require Sphinx build (deselect with '-m \"not integration\"')",
+]
+addopts = "-ra --strict-markers"
