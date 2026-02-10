@@ -467,6 +467,83 @@ def _build_tools() -> list:
                 "required": [],
             },
         ),
+        Tool(
+            name="memory_capture_ci",
+            description=(
+                "Extract memory candidates from CI log output (test failures, build errors, "
+                "deprecation warnings, timeouts). Parses common CI patterns and generates "
+                "structured memories. Pass log text directly or reference a log file."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "log_text": {
+                        "type": "string",
+                        "description": "Raw CI log text to parse.",
+                    },
+                    "source": {
+                        "type": "string",
+                        "default": "ci-log",
+                        "description": "Source label (e.g. 'ci:github-actions:run-123').",
+                    },
+                    "tags": {
+                        "type": "string",
+                        "description": "Extra tags, comma-separated. topic:ci is auto-added.",
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["human", "json"],
+                        "default": "human",
+                        "description": "Output format.",
+                    },
+                    "auto_add": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Automatically add candidates to workspace.",
+                    },
+                },
+                "required": ["log_text"],
+            },
+        ),
+        Tool(
+            name="memory_capture_discussion",
+            description=(
+                "Extract memory candidates from a discussion or conversation transcript. "
+                "Identifies decisions, preferences, goals, facts, risks, and open questions "
+                "from natural language patterns like 'we decided to...', 'I prefer...', "
+                "'the goal is...', 'should we...'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "transcript": {
+                        "type": "string",
+                        "description": "Raw text of the discussion/conversation.",
+                    },
+                    "source": {
+                        "type": "string",
+                        "default": "discussion",
+                        "description": "Source label (e.g. 'slack:2026-02-10', 'meeting:standup').",
+                    },
+                    "tags": {
+                        "type": "string",
+                        "description": "Extra tags, comma-separated. topic:discussion is auto-added.",
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["human", "json"],
+                        "default": "human",
+                        "description": "Output format.",
+                    },
+                    "auto_add": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Automatically add candidates to workspace.",
+                    },
+                },
+                "required": ["transcript"],
+            },
+        ),
     ]
 
 
@@ -594,6 +671,10 @@ def _register_handlers(server: Server) -> None:
                 return _handle_apply(arguments)
             elif name == "memory_capture_git":
                 return _handle_capture_git(arguments)
+            elif name == "memory_capture_ci":
+                return _handle_capture_ci(arguments)
+            elif name == "memory_capture_discussion":
+                return _handle_capture_discussion(arguments)
             else:
                 return _text_response(f"Unknown tool: {name}")
         except SystemExit as e:
@@ -864,6 +945,88 @@ def _handle_capture_git(args: dict[str, Any]) -> list[TextContent]:
         until=args.get("until", "HEAD"),
         repo_name=args.get("repo_name"),
         min_confidence=args.get("min_confidence", "low"),
+    )
+
+    output_lines: list[str] = []
+    fmt = args.get("format", "human")
+    output_lines.append(format_candidates(candidates, fmt=fmt))
+
+    if args.get("auto_add", False) and candidates:
+        count = 0
+        for c in candidates:
+            directive = generate_rst_directive(
+                mem_type=c.type,
+                title=c.title,
+                tags=c.tags,
+                source=c.source,
+                confidence=c.confidence,
+                scope=c.scope,
+                body=c.body,
+            )
+            append_to_rst(workspace, c.type, directive)
+            count += 1
+        output_lines.append(f"\nAdded {count} memories to workspace.")
+        success, msg = run_rebuild(workspace)
+        output_lines.append(msg)
+
+    return _text_response("\n".join(output_lines))
+
+
+def _handle_capture_ci(args: dict[str, Any]) -> list[TextContent]:
+    from .capture import capture_from_ci, format_candidates
+    from .rst import append_to_rst, generate_rst_directive
+
+    workspace = _get_workspace()
+    log_text = args.get("log_text", "")
+    extra_tags = (
+        [t.strip() for t in args["tags"].split(",") if t.strip()] if args.get("tags") else None
+    )
+    candidates = capture_from_ci(
+        workspace=workspace,
+        log_text=log_text,
+        source=args.get("source", "ci-log"),
+        tags=extra_tags,
+    )
+
+    output_lines: list[str] = []
+    fmt = args.get("format", "human")
+    output_lines.append(format_candidates(candidates, fmt=fmt))
+
+    if args.get("auto_add", False) and candidates:
+        count = 0
+        for c in candidates:
+            directive = generate_rst_directive(
+                mem_type=c.type,
+                title=c.title,
+                tags=c.tags,
+                source=c.source,
+                confidence=c.confidence,
+                scope=c.scope,
+                body=c.body,
+            )
+            append_to_rst(workspace, c.type, directive)
+            count += 1
+        output_lines.append(f"\nAdded {count} memories to workspace.")
+        success, msg = run_rebuild(workspace)
+        output_lines.append(msg)
+
+    return _text_response("\n".join(output_lines))
+
+
+def _handle_capture_discussion(args: dict[str, Any]) -> list[TextContent]:
+    from .capture import capture_from_discussion, format_candidates
+    from .rst import append_to_rst, generate_rst_directive
+
+    workspace = _get_workspace()
+    transcript = args.get("transcript", "")
+    extra_tags = (
+        [t.strip() for t in args["tags"].split(",") if t.strip()] if args.get("tags") else None
+    )
+    candidates = capture_from_discussion(
+        workspace=workspace,
+        transcript=transcript,
+        source=args.get("source", "discussion"),
+        tags=extra_tags,
     )
 
     output_lines: list[str] = []

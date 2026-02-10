@@ -33,7 +33,7 @@ class TestMCPAvailability:
 
 class TestMCPToolDefinitions:
     def test_tool_count(self) -> None:
-        assert len(TOOLS) >= 8
+        assert len(TOOLS) >= 13
 
     def test_all_tools_have_schemas(self) -> None:
         for tool in TOOLS:
@@ -54,6 +54,8 @@ class TestMCPToolDefinitions:
             "memory_plan",
             "memory_apply",
             "memory_capture_git",
+            "memory_capture_ci",
+            "memory_capture_discussion",
         ]:
             assert expected in names, f"Missing tool: {expected}"
 

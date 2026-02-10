@@ -18,7 +18,9 @@ AI agents lose context between sessions. This protocol gives them a structured w
 - **Auto-scaling** — RST files split at 50 entries, transparent to queries
 - **Git-native** — every memory is an RST directive, fully diffable and versioned
 - **MCP server** — expose memory as tools for Claude Desktop, VS Code Copilot, and other MCP clients
-- **CLI-first** — 12 subcommands for full lifecycle management
+- **Autonomous capture** — extract memories from Git commits, CI logs, and discussion transcripts
+- **Planning engine** — analyze memory graph and propose maintenance actions
+- **CLI-first** — 16+ subcommands for full lifecycle management
 
 ## Installation
 
@@ -82,6 +84,11 @@ memory tags [--prefix PREFIX]           # Discover tags in use
 memory stale                            # Find expired/overdue memories
 memory review                           # Show memories needing review
 memory rebuild                          # Rebuild needs.json
+memory capture git                      # Extract memories from recent commits
+memory capture ci --input <file|->      # Extract memories from CI/test logs
+memory capture discussion --input <file|->  # Extract from conversation transcripts
+memory plan [--auto-apply]              # Analyze graph and propose maintenance
+memory apply <plan.json>                # Execute a generated plan
 ```
 
 Key flags for `recall`:
@@ -155,6 +162,11 @@ Add to `.vscode/mcp.json`:
 | `memory_tags` | List all tags with counts |
 | `memory_stale` | Find expired/overdue memories |
 | `memory_rebuild` | Rebuild needs.json index |
+| `memory_capture_git` | Extract memories from recent Git commits |
+| `memory_capture_ci` | Extract memories from CI/test log output |
+| `memory_capture_discussion` | Extract memories from conversation transcripts |
+| `memory_plan` | Analyze memory graph and propose maintenance actions |
+| `memory_apply` | Execute a generated maintenance plan |
 
 ## Memory Types
 
@@ -282,8 +294,11 @@ ai_memory_protocol/
 └── src/
     └── ai_memory_protocol/
         ├── __init__.py
-        ├── cli.py           # CLI (argparse, 12 subcommands)
-        ├── mcp_server.py    # MCP server (8 tools, stdio transport)
+        ├── cli.py           # CLI (argparse, 16+ subcommands)
+        ├── mcp_server.py    # MCP server (13 tools, stdio transport)
+        ├── capture.py       # Knowledge extraction (git, CI, discussion)
+        ├── planner.py       # Graph analysis and maintenance planning
+        ├── executor.py      # Plan execution engine
         ├── config.py        # Type definitions, constants
         ├── engine.py        # Workspace detection, search, graph walk
         ├── formatter.py     # Output formatting (brief/compact/context/json)
@@ -292,6 +307,68 @@ ai_memory_protocol/
 ```
 
 Memory data lives in a **separate workspace** (e.g., `.memories/`), created with `memory init`.
+
+## Autonomous Workflow
+
+The protocol supports a fully autonomous memory lifecycle — agents can capture, plan, and maintain knowledge without human intervention:
+
+```
+  capture (git / CI / discussion)
+        │
+        ▼
+  plan  (analyze graph → propose actions)
+        │
+        ▼
+  apply (execute plan → add/update/deprecate)
+        │
+        ▼
+  rebuild (sphinx-build → needs.json)
+        │
+        ▼
+  recall (search updated graph)
+```
+
+**Capture sources:**
+- `memory capture git` — scans recent commits, extracts decisions, bug fixes, refactors
+- `memory capture ci --input <log>` — parses test failures, compiler errors, deprecation warnings
+- `memory capture discussion --input <transcript>` — classifies conversation into decisions, facts, preferences, risks, goals, questions
+
+**Planning engine:**
+- `memory plan` — analyzes the memory graph for staleness, missing links, contradictions, and proposes maintenance actions
+- `memory plan --auto-apply` — execute the plan immediately after analysis
+- `memory apply plan.json` — execute a previously saved plan
+
+All captured candidates include provenance (`--source`) and are deduplicated against existing memories.
+
+## Build-as-Guardian
+
+The Sphinx build acts as a quality gate for the memory graph. `needs_warnings` in `conf.py` define constraints that fire during `memory rebuild`:
+
+```python
+needs_warnings = {
+    "missing_topic_tag": "type in ['mem','dec','fact',...] and not any(t.startswith('topic:') for t in tags)",
+    "empty_body": "description == '' or description == 'TODO: Add description.'",
+    "deprecated_without_supersede": "status == 'deprecated' and len(supersedes_back) == 0",
+}
+```
+
+With `sphinx-build -W` (warnings as errors), the build fails if any memory violates these constraints. This means:
+- Every memory must have at least one `topic:` tag
+- No empty placeholders survive to the index
+- Deprecated memories must be superseded by a replacement
+
+Agents learn to self-correct: if `rebuild` fails, they read the warning, fix the offending memory, and retry.
+
+## Human Role
+
+Humans are **observers and editors**, not gatekeepers:
+
+- **Dashboards** — `memory/dashboards.rst` contains `needtable`, `needlist`, and `needflow` directives rendering the live state of the memory graph as HTML
+- **RST editing** — memories are plain RST, editable in any text editor or IDE with full diff/blame in Git
+- **Override** — humans can update status, confidence, or tags on any memory via CLI or direct RST edit
+- **Review** — `memory review` surfaces memories whose `review_after` date has passed, prompting human validation
+
+The protocol is designed so that agents maintain knowledge autonomously while humans retain full visibility and override capability.
 
 ## Contributing
 

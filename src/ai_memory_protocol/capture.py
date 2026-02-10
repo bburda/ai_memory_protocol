@@ -1,11 +1,15 @@
 """Capture knowledge from external sources — git, CI, discussions.
 
-Primary use-case: extract memories from git history so the agent does
-not lose context from past development sessions.
+Extract memories from:
+- **Git history** — commit messages classified by conventional commit type
+- **CI logs** — test failures, build errors, warnings
+- **Discussions** — decisions, preferences, goals from conversation transcripts
 
 Usage:
-    from ai_memory_protocol.capture import capture_from_git
+    from ai_memory_protocol.capture import capture_from_git, capture_from_ci, capture_from_discussion
     candidates = capture_from_git(workspace, repo_path, since="2 weeks ago")
+    candidates = capture_from_ci(workspace, log_text)
+    candidates = capture_from_discussion(workspace, transcript)
 """
 
 from __future__ import annotations
@@ -468,3 +472,347 @@ def format_candidates(candidates: list[MemoryCandidate], fmt: str = "human") -> 
         lines.append("")
 
     return "\n".join(lines)
+
+
+# ===========================================================================
+# CI Log Capture
+# ===========================================================================
+
+# Patterns for extracting structured data from CI logs
+_CI_PATTERNS: list[tuple[str, str, str, str]] = [
+    # (regex, memory_type, title_template, confidence)
+    # Test failures
+    (
+        r"(?:FAILED|FAIL|ERROR)\s*:?\s*(?:test_?)?(\S+?)(?:\s*[-—]\s*(.+))?$",
+        "mem",
+        "CI test failure: {name}",
+        "high",
+    ),
+    # Python pytest failures
+    (
+        r"(?:FAILED)\s+([\w/]+\.py::[\w:]+)",
+        "mem",
+        "Test failure: {name}",
+        "high",
+    ),
+    # Compiler errors (C/C++)
+    (
+        r"(\S+\.\w+):(\d+):\d+:\s*error:\s*(.+)",
+        "mem",
+        "Build error in {file}:{line}",
+        "high",
+    ),
+    # Linker errors
+    (
+        r"(?:undefined reference to|cannot find -l)(.+)",
+        "mem",
+        "Linker error: {name}",
+        "high",
+    ),
+    # Deprecation warnings
+    (
+        r"(?:DeprecationWarning|FutureWarning):\s*(.+)",
+        "risk",
+        "Deprecation warning: {name}",
+        "medium",
+    ),
+    # Timeout errors
+    (
+        r"(?:TimeoutError|timed?\s*out)\s*:?\s*(.+)?",
+        "mem",
+        "Timeout: {name}",
+        "high",
+    ),
+    # CMake / build configuration errors
+    (
+        r"CMake Error.*?:\s*(.+)",
+        "mem",
+        "CMake error: {name}",
+        "high",
+    ),
+    # Generic error lines
+    (
+        r"^(?:Error|ERROR)\s*:?\s*(.+)",
+        "mem",
+        "CI error: {name}",
+        "medium",
+    ),
+]
+
+# Summary line patterns: "X passed, Y failed"
+_CI_SUMMARY_PATTERN = re.compile(
+    r"(\d+)\s+(?:passed|succeeded).*?(\d+)\s+(?:failed|errors?)",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class _CIMatch:
+    """A matched CI pattern with extracted data."""
+
+    mem_type: str
+    title: str
+    detail: str
+    confidence: str
+    line_num: int
+
+
+def _parse_ci_log(text: str) -> list[_CIMatch]:
+    """Parse CI log text and extract structured error/failure data."""
+    matches: list[_CIMatch] = []
+    seen_titles: set[str] = set()
+
+    for line_num, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+
+        for pattern, mem_type, title_tpl, confidence in _CI_PATTERNS:
+            m = re.search(pattern, line, re.IGNORECASE)
+            if m:
+                groups = m.groups()
+                # Build title from template and captured groups
+                name = (groups[0] or "").strip() if groups else ""
+                file_val = ""
+                line_val = ""
+                if len(groups) >= 3:
+                    file_val = (groups[0] or "").strip()
+                    line_val = (groups[1] or "").strip()
+                    name = (groups[2] or "").strip()
+
+                title = title_tpl.format(
+                    name=name[:80] if name else "unknown",
+                    file=file_val,
+                    line=line_val,
+                )[:120]
+
+                # Dedup within same log
+                if title in seen_titles:
+                    break
+                seen_titles.add(title)
+
+                detail = line[:200]
+                matches.append(
+                    _CIMatch(
+                        mem_type=mem_type,
+                        title=title,
+                        detail=detail,
+                        confidence=confidence,
+                        line_num=line_num,
+                    )
+                )
+                break  # One match per line
+
+    return matches
+
+
+def capture_from_ci(
+    workspace: Path,
+    log_text: str,
+    source: str = "ci-log",
+    tags: list[str] | None = None,
+    deduplicate: bool = True,
+) -> list[MemoryCandidate]:
+    """Extract memory candidates from CI log output.
+
+    Parameters
+    ----------
+    workspace
+        Path to the memory workspace (for dedup against existing).
+    log_text
+        Raw CI log text (stdout/stderr from build or test run).
+    source
+        Source label for provenance (e.g. ``"ci:github-actions:run-123"``).
+    tags
+        Additional tags to apply to all candidates. Auto-infers ``topic:ci``.
+    deduplicate
+        If True, filter out candidates that match existing memories.
+
+    Returns
+    -------
+    list[MemoryCandidate]
+        Candidate memories ready for review and optional insertion.
+    """
+    base_tags = ["topic:ci"]
+    if tags:
+        base_tags.extend(t for t in tags if t not in base_tags)
+
+    matches = _parse_ci_log(log_text)
+    if not matches:
+        return []
+
+    # Load existing for dedup
+    existing: dict[str, Any] = {}
+    if deduplicate:
+        try:
+            existing = load_needs(workspace)
+        except (SystemExit, Exception):
+            existing = {}
+
+    candidates: list[MemoryCandidate] = []
+    for match in matches:
+        candidate = MemoryCandidate(
+            type=match.mem_type,
+            title=match.title,
+            body=f"Line {match.line_num}: {match.detail}",
+            tags=list(base_tags),
+            source=source,
+            confidence=match.confidence,
+        )
+        candidates.append(candidate)
+
+    # Dedup against existing
+    if deduplicate and existing:
+        candidates = [c for c in candidates if not _is_duplicate(c, existing)]
+
+    return candidates
+
+
+# ===========================================================================
+# Discussion / Transcript Capture
+# ===========================================================================
+
+# Patterns for classifying discussion statements
+_DISCUSSION_PATTERNS: list[tuple[str, str, str]] = [
+    # Decisions
+    (r"(?:we\s+)?decided\s+(?:to\s+)?(.+)", "dec", "high"),
+    (r"(?:the\s+)?decision\s+is\s+(?:to\s+)?(.+)", "dec", "high"),
+    (
+        r"(?:let'?s|we\s+should|we\s+will|we'?ll)\s+(?:go\s+with\s+|use\s+|adopt\s+)(.+)",
+        "dec",
+        "medium",
+    ),
+    (r"(?:I'?m\s+going\s+with|going\s+with|choosing)\s+(.+)", "dec", "medium"),
+    # Preferences
+    (r"I\s+prefer\s+(.+)", "pref", "high"),
+    (r"(?:let'?s|we\s+should)\s+(?:always|prefer|stick\s+with|keep)\s+(.+)", "pref", "medium"),
+    (r"(?:convention|standard|style):\s*(.+)", "pref", "medium"),
+    (r"(?:use|prefer)\s+(\S+)\s+(?:over|instead\s+of)\s+(\S+)", "pref", "medium"),
+    # Goals
+    (r"(?:the\s+)?goal\s+(?:is\s+)?(?:to\s+)?(.+)", "goal", "high"),
+    (r"we\s+(?:need|want|aim|plan)\s+to\s+(.+)", "goal", "medium"),
+    (r"(?:TODO|FIXME|HACK):\s*(.+)", "goal", "medium"),
+    (r"next\s+(?:step|priority|milestone):\s*(.+)", "goal", "medium"),
+    # Facts
+    (r"(?:it\s+)?turns?\s+out\s+(?:that\s+)?(.+)", "fact", "medium"),
+    (r"(?:TIL|FYI|note|important):\s*(.+)", "fact", "medium"),
+    (
+        r"(?:the\s+)?(?:API|endpoint|service|server)\s+(?:is|uses|runs|supports)\s+(.+)",
+        "fact",
+        "medium",
+    ),
+    # Risks
+    (r"(?:risk|warning|careful|watch\s+out|danger):\s*(.+)", "risk", "high"),
+    (r"(?:this\s+)?(?:might|could|may)\s+(?:break|fail|cause)\s+(.+)", "risk", "medium"),
+    # Questions
+    (r"(?:should\s+we|do\s+we\s+need\s+to|how\s+(?:do|should)\s+we)\s+(.+)\??", "q", "medium"),
+    (r"(?:open\s+question|TBD|to\s+be\s+decided):\s*(.+)", "q", "medium"),
+]
+
+
+def _classify_statement(text: str) -> tuple[str, str, str] | None:
+    """Classify a statement into a memory type.
+
+    Returns (type, extracted_title, confidence) or None if no match.
+    """
+    text_stripped = text.strip()
+    for pattern, mem_type, confidence in _DISCUSSION_PATTERNS:
+        m = re.search(pattern, text_stripped, re.IGNORECASE)
+        if m:
+            title = m.group(1).strip()
+            # Handle special case for "use X over Y" → "Prefer X over Y"
+            if mem_type == "pref" and len(m.groups()) >= 2:
+                title = f"{m.group(1)} over {m.group(2)}"
+            # Clean title
+            title = re.sub(r"\s+", " ", title)
+            title = title.rstrip(".")
+            if len(title) < 5:
+                continue
+            return mem_type, title[:120], confidence
+    return None
+
+
+def capture_from_discussion(
+    workspace: Path,
+    transcript: str,
+    source: str = "discussion",
+    tags: list[str] | None = None,
+    deduplicate: bool = True,
+) -> list[MemoryCandidate]:
+    """Extract memory candidates from a discussion transcript.
+
+    Parses free-text conversation and identifies decisions, preferences,
+    goals, facts, risks, and open questions based on linguistic patterns.
+
+    Parameters
+    ----------
+    workspace
+        Path to the memory workspace (for dedup against existing).
+    transcript
+        Raw text of the discussion/conversation.
+    source
+        Source label for provenance (e.g. ``"slack:2026-02-10"``).
+    tags
+        Additional tags to apply to all candidates.
+    deduplicate
+        If True, filter out candidates that match existing memories.
+
+    Returns
+    -------
+    list[MemoryCandidate]
+        Candidate memories ready for review and optional insertion.
+    """
+    base_tags = ["topic:discussion"]
+    if tags:
+        base_tags.extend(t for t in tags if t not in base_tags)
+
+    # Load existing for dedup
+    existing: dict[str, Any] = {}
+    if deduplicate:
+        try:
+            existing = load_needs(workspace)
+        except (SystemExit, Exception):
+            existing = {}
+
+    candidates: list[MemoryCandidate] = []
+    seen_titles: set[str] = set()
+
+    # Process line by line and also try multi-line sentences
+    lines = transcript.splitlines()
+    for line in lines:
+        line = line.strip()
+        if not line or len(line) < 10:
+            continue
+
+        # Strip common prefixes: "> quote", "- list", "* list", "User:", timestamps
+        cleaned = re.sub(r"^(?:[>*\-]\s*|\d{1,2}:\d{2}\s*|[\w]+:\s*)", "", line).strip()
+        if not cleaned or len(cleaned) < 10:
+            continue
+
+        result = _classify_statement(cleaned)
+        if result is None:
+            continue
+
+        mem_type, title, confidence = result
+
+        # Dedup within same transcript
+        title_lower = title.lower()
+        if title_lower in seen_titles:
+            continue
+        seen_titles.add(title_lower)
+
+        candidate = MemoryCandidate(
+            type=mem_type,
+            title=title,
+            body=cleaned[:500],
+            tags=list(base_tags),
+            source=source,
+            confidence=confidence,
+        )
+        candidates.append(candidate)
+
+    # Dedup against existing
+    if deduplicate and existing:
+        candidates = [c for c in candidates if not _is_duplicate(c, existing)]
+
+    return candidates
