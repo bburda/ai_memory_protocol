@@ -10,12 +10,16 @@ import pytest
 from ai_memory_protocol.capture import (
     MemoryCandidate,
     _classify_commit,
+    _classify_statement,
     _extract_scope,
     _file_overlap,
     _GitCommit,
     _group_commits,
     _infer_tags,
     _is_duplicate,
+    _parse_ci_log,
+    capture_from_ci,
+    capture_from_discussion,
     capture_from_git,
     format_candidates,
 )
@@ -434,3 +438,307 @@ class TestMemoryCandidate:
         d = c.to_dict()
         assert "body" not in d
         assert "source" not in d
+
+
+# ===========================================================================
+# Tests: CI Log Capture
+# ===========================================================================
+
+
+class TestParseCILog:
+    def test_test_failure(self):
+        log = "FAILED: test_gateway_health\nSome other output"
+        matches = _parse_ci_log(log)
+        assert len(matches) >= 1
+        assert matches[0].mem_type == "mem"
+        assert "gateway_health" in matches[0].title
+
+    def test_pytest_failure(self):
+        log = "FAILED tests/test_api.py::TestHealth::test_endpoint"
+        matches = _parse_ci_log(log)
+        assert len(matches) >= 1
+        assert "test_api" in matches[0].title or "TestHealth" in matches[0].title
+
+    def test_compiler_error(self):
+        log = "src/server.cpp:42:10: error: use of undeclared identifier 'foo'"
+        matches = _parse_ci_log(log)
+        assert len(matches) >= 1
+        assert matches[0].confidence == "high"
+        assert "server.cpp" in matches[0].title
+
+    def test_deprecation_warning(self):
+        log = "DeprecationWarning: pkg_resources is deprecated"
+        matches = _parse_ci_log(log)
+        assert len(matches) >= 1
+        assert matches[0].mem_type == "risk"
+
+    def test_timeout_error(self):
+        log = "TimeoutError: connection timed out after 30 seconds"
+        matches = _parse_ci_log(log)
+        assert len(matches) >= 1
+        assert "timeout" in matches[0].title.lower()
+
+    def test_cmake_error(self):
+        log = "CMake Error at CMakeLists.txt:15: Could not find dependency XYZ"
+        matches = _parse_ci_log(log)
+        assert len(matches) >= 1
+        assert "cmake" in matches[0].title.lower() or "CMake" in matches[0].detail
+
+    def test_generic_error(self):
+        log = "Error: file not found: config.yaml"
+        matches = _parse_ci_log(log)
+        assert len(matches) >= 1
+
+    def test_empty_log(self):
+        matches = _parse_ci_log("")
+        assert matches == []
+
+    def test_clean_log_no_matches(self):
+        log = "Building project...\nCompilation successful.\nAll tests passed."
+        matches = _parse_ci_log(log)
+        assert matches == []
+
+    def test_dedup_within_log(self):
+        log = "FAILED: test_foo\nFAILED: test_foo\nFAILED: test_bar"
+        matches = _parse_ci_log(log)
+        titles = [m.title for m in matches]
+        # Should not have duplicate titles
+        assert len(titles) == len(set(titles))
+
+
+class TestCaptureFromCI:
+    def test_basic_capture(self, tmp_workspace):
+        log = "FAILED: test_health_check\nError: connection refused"
+        with patch("ai_memory_protocol.capture.load_needs", return_value={}):
+            candidates = capture_from_ci(
+                workspace=tmp_workspace,
+                log_text=log,
+                source="ci:test-run-123",
+            )
+            assert len(candidates) >= 1
+            assert all("topic:ci" in c.tags for c in candidates)
+            assert candidates[0].source == "ci:test-run-123"
+
+    def test_extra_tags(self, tmp_workspace):
+        log = "FAILED: test_api"
+        with patch("ai_memory_protocol.capture.load_needs", return_value={}):
+            candidates = capture_from_ci(
+                workspace=tmp_workspace,
+                log_text=log,
+                tags=["repo:backend", "topic:api"],
+            )
+            assert len(candidates) >= 1
+            assert "repo:backend" in candidates[0].tags
+            assert "topic:ci" in candidates[0].tags
+
+    def test_empty_log_returns_empty(self, tmp_workspace):
+        candidates = capture_from_ci(
+            workspace=tmp_workspace,
+            log_text="All tests passed. Build successful.",
+        )
+        assert candidates == []
+
+    def test_dedup_against_existing(self, tmp_workspace):
+        log = "FAILED: test_health_check"
+        existing = {
+            "MEM_x": {
+                "title": "CI test failure: test_health_check",
+                "status": "active",
+                "source": "",
+            },
+        }
+        with patch("ai_memory_protocol.capture.load_needs", return_value=existing):
+            candidates = capture_from_ci(
+                workspace=tmp_workspace,
+                log_text=log,
+                deduplicate=True,
+            )
+            assert len(candidates) == 0
+
+
+# ===========================================================================
+# Tests: Discussion Capture
+# ===========================================================================
+
+
+class TestClassifyStatement:
+    def test_decision(self):
+        result = _classify_statement("We decided to use FastAPI for the backend")
+        assert result is not None
+        mem_type, title, confidence = result
+        assert mem_type == "dec"
+        assert "FastAPI" in title
+
+    def test_lets_go_with(self):
+        result = _classify_statement("Let's go with PostgreSQL for storage")
+        assert result is not None
+        assert result[0] == "dec"
+
+    def test_preference(self):
+        result = _classify_statement("I prefer TypeScript over JavaScript")
+        assert result is not None
+        assert result[0] == "pref"
+
+    def test_convention(self):
+        result = _classify_statement("Convention: all API responses use camelCase")
+        assert result is not None
+        assert result[0] == "pref"
+
+    def test_goal(self):
+        result = _classify_statement("The goal is to have 80% test coverage")
+        assert result is not None
+        assert result[0] == "goal"
+
+    def test_we_need_to(self):
+        result = _classify_statement("We need to optimize the database queries")
+        assert result is not None
+        assert result[0] == "goal"
+
+    def test_todo(self):
+        result = _classify_statement("TODO: add retry logic for failed requests")
+        assert result is not None
+        assert result[0] == "goal"
+
+    def test_fact_turns_out(self):
+        result = _classify_statement("It turns out the API uses OAuth2 internally")
+        assert result is not None
+        assert result[0] == "fact"
+
+    def test_fact_til(self):
+        result = _classify_statement("TIL: Sphinx-Needs supports needextend directives")
+        assert result is not None
+        assert result[0] == "fact"
+
+    def test_risk(self):
+        result = _classify_statement("Warning: this might break backward compatibility")
+        assert result is not None
+        assert result[0] == "risk"
+
+    def test_could_break(self):
+        result = _classify_statement("This could break the CI pipeline if merged")
+        assert result is not None
+        assert result[0] == "risk"
+
+    def test_question(self):
+        result = _classify_statement("Should we use Redis for caching?")
+        assert result is not None
+        assert result[0] == "q"
+
+    def test_open_question(self):
+        result = _classify_statement("Open question: how do we handle rate limiting?")
+        assert result is not None
+        assert result[0] == "q"
+
+    def test_no_match(self):
+        result = _classify_statement("The weather is nice today")
+        assert result is None
+
+    def test_too_short(self):
+        result = _classify_statement("Decided ok")
+        assert result is None  # Title too short after extraction
+
+
+class TestCaptureFromDiscussion:
+    def test_basic_capture(self, tmp_workspace):
+        transcript = """
+        We decided to use ROS 2 Jazzy for the gateway.
+        I prefer async/await over callbacks for all new code.
+        The goal is to have all endpoints documented by March.
+        Should we support gRPC in addition to REST?
+        """
+        with patch("ai_memory_protocol.capture.load_needs", return_value={}):
+            candidates = capture_from_discussion(
+                workspace=tmp_workspace,
+                transcript=transcript,
+                source="meeting:standup",
+            )
+            assert len(candidates) >= 3
+            types = {c.type for c in candidates}
+            assert "dec" in types
+            assert "pref" in types or "goal" in types
+
+    def test_tags_applied(self, tmp_workspace):
+        transcript = "We decided to deploy on Kubernetes for production"
+        with patch("ai_memory_protocol.capture.load_needs", return_value={}):
+            candidates = capture_from_discussion(
+                workspace=tmp_workspace,
+                transcript=transcript,
+                tags=["repo:infra"],
+            )
+            assert len(candidates) >= 1
+            assert "topic:discussion" in candidates[0].tags
+            assert "repo:infra" in candidates[0].tags
+
+    def test_source_label(self, tmp_workspace):
+        transcript = "The goal is to launch by Q3 2026"
+        with patch("ai_memory_protocol.capture.load_needs", return_value={}):
+            candidates = capture_from_discussion(
+                workspace=tmp_workspace,
+                transcript=transcript,
+                source="slack:2026-02-10",
+            )
+            assert len(candidates) >= 1
+            assert candidates[0].source == "slack:2026-02-10"
+
+    def test_empty_transcript(self, tmp_workspace):
+        candidates = capture_from_discussion(
+            workspace=tmp_workspace,
+            transcript="",
+        )
+        assert candidates == []
+
+    def test_irrelevant_transcript(self, tmp_workspace):
+        transcript = """
+        Good morning everyone.
+        How was your weekend?
+        Fine thanks.
+        """
+        candidates = capture_from_discussion(
+            workspace=tmp_workspace,
+            transcript=transcript,
+        )
+        assert candidates == []
+
+    def test_dedup_within_transcript(self, tmp_workspace):
+        transcript = """
+        We decided to use PostgreSQL for storage.
+        As I said, we decided to use PostgreSQL for storage.
+        """
+        with patch("ai_memory_protocol.capture.load_needs", return_value={}):
+            candidates = capture_from_discussion(
+                workspace=tmp_workspace,
+                transcript=transcript,
+            )
+            # Should deduplicate within the same transcript
+            titles = [c.title.lower() for c in candidates]
+            assert len(titles) == len(set(titles))
+
+    def test_strips_prefixes(self, tmp_workspace):
+        transcript = """
+        > We decided to adopt trunk-based development
+        - TODO: set up branch protection rules
+        12:30 I prefer small PRs over large ones
+        """
+        with patch("ai_memory_protocol.capture.load_needs", return_value={}):
+            candidates = capture_from_discussion(
+                workspace=tmp_workspace,
+                transcript=transcript,
+            )
+            assert len(candidates) >= 2
+
+    def test_dedup_against_existing(self, tmp_workspace):
+        transcript = "We decided to use FastAPI for the backend"
+        existing = {
+            "DEC_x": {
+                "title": "use FastAPI for the backend",
+                "status": "active",
+                "source": "",
+            },
+        }
+        with patch("ai_memory_protocol.capture.load_needs", return_value=existing):
+            candidates = capture_from_discussion(
+                workspace=tmp_workspace,
+                transcript=transcript,
+                deduplicate=True,
+            )
+            assert len(candidates) == 0

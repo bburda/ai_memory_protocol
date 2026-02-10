@@ -27,7 +27,7 @@ from datetime import date
 from pathlib import Path
 
 from . import __version__
-from .capture import capture_from_git, format_candidates
+from .capture import capture_from_ci, capture_from_discussion, capture_from_git, format_candidates
 from .config import TYPE_FILES
 from .engine import (
     expand_graph,
@@ -558,10 +558,80 @@ def cmd_capture(args: argparse.Namespace) -> None:
             if not args.no_rebuild:
                 success, message = run_rebuild(workspace)
                 print(message)
+    elif args.source == "ci":
+        log_text = _read_capture_input(args.input)
+        if log_text is None:
+            print("Provide CI log via --input <file> or pipe to stdin.")
+            sys.exit(1)
+        extra_tags = [t.strip() for t in args.extra_tags.split(",")] if args.extra_tags else None
+        candidates = capture_from_ci(
+            workspace=workspace,
+            log_text=log_text,
+            source=args.source_label or "ci-log",
+            tags=extra_tags,
+        )
+        print(format_candidates(candidates, fmt=args.format))
+        _auto_add_candidates(workspace, candidates, args)
+    elif args.source == "discussion":
+        transcript = _read_capture_input(args.input)
+        if transcript is None:
+            print("Provide transcript via --input <file> or pipe to stdin.")
+            sys.exit(1)
+        extra_tags = [t.strip() for t in args.extra_tags.split(",")] if args.extra_tags else None
+        candidates = capture_from_discussion(
+            workspace=workspace,
+            transcript=transcript,
+            source=args.source_label or "discussion",
+            tags=extra_tags,
+        )
+        print(format_candidates(candidates, fmt=args.format))
+        _auto_add_candidates(workspace, candidates, args)
     else:
         print(f"Unknown capture source: {args.source}")
-        print("Supported sources: git")
+        print("Supported sources: git, ci, discussion")
         sys.exit(1)
+
+
+def _read_capture_input(input_path: str | None) -> str | None:
+    """Read capture input from file, stdin, or return None."""
+    if input_path:
+        path = Path(input_path)
+        if path.exists():
+            return path.read_text()
+        print(f"File not found: {input_path}")
+        return None
+    if not sys.stdin.isatty():
+        return sys.stdin.read()
+    return None
+
+
+def _auto_add_candidates(
+    workspace: Path,
+    candidates: list,
+    args: argparse.Namespace,
+) -> None:
+    """Add candidates to workspace if --auto-add flag is set."""
+    if not getattr(args, "auto_add", False) or not candidates:
+        return
+    from .rst import append_to_rst, generate_rst_directive
+
+    count = 0
+    for c in candidates:
+        directive = generate_rst_directive(
+            mem_type=c.type,
+            title=c.title,
+            tags=c.tags,
+            source=c.source,
+            confidence=c.confidence,
+            scope=c.scope,
+            body=c.body,
+        )
+        append_to_rst(workspace, c.type, directive)
+        count += 1
+    print(f"\nAdded {count} memories to workspace.")
+    if not getattr(args, "no_rebuild", False):
+        success, message = run_rebuild(workspace)
+        print(message)
 
 
 # ---------------------------------------------------------------------------
@@ -826,16 +896,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_capture = sub.add_parser("capture", help="Capture memories from external sources")
     p_capture.add_argument(
         "source",
-        choices=["git"],
+        choices=["git", "ci", "discussion"],
         help="Capture source type",
     )
     p_capture.add_argument(
         "--repo",
-        help="Path to git repository (default: current directory)",
+        help="Path to git repository (default: current directory, git only)",
     )
     p_capture.add_argument(
         "--repo-name",
-        help="Repository name for repo: tags (auto-detected from path if omitted)",
+        help="Repository name for repo: tags (auto-detected from path if omitted, git only)",
     )
     p_capture.add_argument(
         "--since",
@@ -869,6 +939,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-rebuild",
         action="store_true",
         help="Skip rebuild after auto-add",
+    )
+    p_capture.add_argument(
+        "--input",
+        help="Input file for ci/discussion capture (reads stdin if omitted and not a TTY)",
+    )
+    p_capture.add_argument(
+        "--source-label",
+        help="Source provenance label (e.g. 'ci:github-actions:run-123', 'slack:2026-02-10')",
+    )
+    p_capture.add_argument(
+        "--extra-tags",
+        help="Extra tags for ci/discussion candidates, comma-separated",
     )
     p_capture.set_defaults(func=cmd_capture)
 
