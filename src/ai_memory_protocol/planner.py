@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Literal
@@ -36,6 +36,7 @@ ALL_CHECKS: list[str] = [
     "conflicts",
     "tag_normalize",
     "split_files",
+    "auto_summaries",
 ]
 
 
@@ -307,6 +308,62 @@ def detect_tag_normalization(needs: dict[str, Any]) -> list[Action]:
     return actions
 
 
+def detect_auto_summaries(
+    needs: dict[str, Any],
+    min_count: int = 5,
+    min_age_days: int = 60,
+) -> list[Action]:
+    """Find topics with many aged observations that could be consolidated.
+
+    When a single ``topic:`` tag has *min_count* or more ``mem`` entries
+    all older than *min_age_days*, propose consolidating them into a
+    single ``fact``.
+
+    O(n) — one pass over active needs, then per-topic grouping.
+    """
+    active = _active_needs(needs)
+    cutoff = (date.today() - timedelta(days=min_age_days)).isoformat()
+
+    # Group observations by topic tag
+    by_topic: dict[str, list[str]] = defaultdict(list)
+    for nid, need in active.items():
+        if need.get("type") != "mem":
+            continue
+        created = need.get("created_at", "")
+        if not created or created > cutoff:
+            continue
+        for tag in need.get("tags", []):
+            if tag.startswith("topic:"):
+                by_topic[tag].append(nid)
+
+    actions: list[Action] = []
+    for topic_tag, ids in by_topic.items():
+        if len(ids) < min_count:
+            continue
+        topic_value = topic_tag.split(":", 1)[1]
+        # Collect all tags from the group for the consolidated entry
+        all_tags: set[str] = set()
+        for nid in ids:
+            all_tags.update(active[nid].get("tags", []))
+
+        actions.append(
+            Action(
+                kind="SUPERSEDE",
+                reason=(
+                    f"Auto-summary: {len(ids)} observations on {topic_tag} "
+                    f"older than {min_age_days} days. Consider consolidating "
+                    f"into a single fact."
+                ),
+                old_id=",".join(sorted(ids)),
+                new_type="fact",
+                new_title=f"Consolidated: {topic_value} observations",
+                new_tags=sorted(all_tags),
+            )
+        )
+
+    return actions
+
+
 def detect_split_files(workspace: Path) -> list[Action]:
     """Find RST files that exceed MAX_ENTRIES_PER_FILE.
 
@@ -343,6 +400,7 @@ _DETECTORS: dict[str, Any] = {
     "conflicts": lambda needs, ws: detect_conflicts(needs),
     "tag_normalize": lambda needs, ws: detect_tag_normalization(needs),
     "split_files": lambda needs, ws: detect_split_files(ws),
+    "auto_summaries": lambda needs, ws: detect_auto_summaries(needs),
 }
 
 
