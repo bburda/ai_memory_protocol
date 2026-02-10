@@ -89,6 +89,7 @@ memory capture ci --input <file|->      # Extract memories from CI/test logs
 memory capture discussion --input <file|->  # Extract from conversation transcripts
 memory plan [--auto-apply]              # Analyze graph and propose maintenance
 memory apply <plan.json>                # Execute a generated plan
+memory doctor                           # Verify installation health
 ```
 
 Key flags for `recall`:
