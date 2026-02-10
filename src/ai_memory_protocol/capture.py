@@ -710,12 +710,20 @@ _DISCUSSION_PATTERNS: list[tuple[str, str, str]] = [
 ]
 
 
+# Confidence ranking for tie-breaking
+_CONFIDENCE_RANK = {"high": 2, "medium": 1, "low": 0}
+
+
 def _classify_statement(text: str) -> tuple[str, str, str] | None:
     """Classify a statement into a memory type.
 
-    Returns (type, extracted_title, confidence) or None if no match.
+    Evaluates all matching patterns and returns the highest-confidence
+    classification.  Returns (type, extracted_title, confidence) or None
+    if no match.
     """
     text_stripped = text.strip()
+    best: tuple[str, str, str] | None = None
+    best_rank = -1
     for pattern, mem_type, confidence in _DISCUSSION_PATTERNS:
         m = re.search(pattern, text_stripped, re.IGNORECASE)
         if m:
@@ -728,8 +736,11 @@ def _classify_statement(text: str) -> tuple[str, str, str] | None:
             title = title.rstrip(".")
             if len(title) < 5:
                 continue
-            return mem_type, title[:120], confidence
-    return None
+            rank = _CONFIDENCE_RANK.get(confidence, 0)
+            if rank > best_rank:
+                best = (mem_type, title[:120], confidence)
+                best_rank = rank
+    return best
 
 
 def capture_from_discussion(
