@@ -120,10 +120,12 @@ def validate_actions(actions: list[Action]) -> tuple[list[Action], list[dict[str
                 visited.add(current)
                 current = supersede_map[current]
             if cycle:
-                skipped.append({
-                    "action": a.to_dict(),
-                    "reason": f"Circular supersede chain involving {a.old_id}",
-                })
+                skipped.append(
+                    {
+                        "action": a.to_dict(),
+                        "reason": f"Circular supersede chain involving {a.old_id}",
+                    }
+                )
                 continue
 
         valid.append(a)
@@ -213,8 +215,7 @@ def _execute_split_file(workspace: Path, action: Action) -> tuple[bool, str]:  #
     via rst.py append_to_rst when MAX_ENTRIES_PER_FILE is exceeded.
     """
     return True, (
-        f"File splitting noted for {action.rst_path}"
-        " — handled automatically on next append."
+        f"File splitting noted for {action.rst_path} — handled automatically on next append."
     )
 
 
@@ -243,8 +244,13 @@ def _git_stash_push(workspace: Path) -> bool:
             capture_output=True,
             text=True,
         )
-        # "No local changes to save" means nothing was stashed
-        return "No local changes" not in result.stdout
+        # Only treat as successful if git exited cleanly.
+        if result.returncode != 0:
+            return False
+        # "No local changes to save" means nothing was stashed.
+        # This may appear in stdout or stderr.
+        output = (result.stdout or "") + (result.stderr or "")
+        return "No local changes to save" not in output
     except OSError:
         return False
 
@@ -346,10 +352,12 @@ def execute_plan(
     for action in valid_actions:
         executor = _EXECUTORS.get(action.kind)
         if not executor:
-            failed.append({
-                "action": action.to_dict(),
-                "error": f"Unknown action kind: {action.kind}",
-            })
+            failed.append(
+                {
+                    "action": action.to_dict(),
+                    "error": f"Unknown action kind: {action.kind}",
+                }
+            )
             continue
 
         try:
@@ -368,16 +376,28 @@ def execute_plan(
     if rebuild and applied:
         build_ok, build_output = run_rebuild(workspace)
 
-    # If build failed, rollback
-    if not build_ok and stashed:
-        _git_stash_pop(workspace)
+    # If build failed, always treat as unsuccessful; use git stash for rollback
+    # when available.
+    if not build_ok:
+        if stashed:
+            _git_stash_pop(workspace)
+            applied_result: list[dict[str, Any]] = []
+            message = "Build failed after applying actions — rolled back via git stash pop."
+        else:
+            # No stash available: cannot automatically roll back workspace changes.
+            applied_result = applied
+            message = (
+                "Build failed after applying actions — no git stash available for "
+                "rollback; workspace may be in an inconsistent state."
+            )
+
         return ExecutionResult(
             success=False,
-            applied=[],
+            applied=applied_result,
             failed=failed,
             skipped=skipped,
             build_output=build_output,
-            message="Build failed after applying actions — rolled back via git stash pop.",
+            message=message,
         )
 
     # Cleanup stash on success
@@ -390,15 +410,15 @@ def execute_plan(
         msg = f"memory: auto-apply {', '.join(sorted(kinds))} ({len(applied)} actions)"
         _git_commit(workspace, msg)
 
+    all_succeeded = not failed
     return ExecutionResult(
-        success=True,
+        success=all_succeeded,
         applied=applied,
         failed=failed,
         skipped=skipped,
         build_output=build_output,
         message=(
-            f"Plan executed: {len(applied)} applied, "
-            f"{len(failed)} failed, {len(skipped)} skipped."
+            f"Plan executed: {len(applied)} applied, {len(failed)} failed, {len(skipped)} skipped."
         ),
     )
 

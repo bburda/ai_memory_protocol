@@ -69,7 +69,7 @@ def create_mcp_server(name: str = "ai-memory-protocol") -> Server:
     if not _MCP_AVAILABLE:
         raise ImportError(
             "MCP SDK not installed. Install with:\n"
-            "  pipx install -e 'ai_memory_protocol/[mcp]'\n"
+            "  pipx install -e '.[mcp]'\n"
             "Or if already installed via pipx:\n"
             "  pipx inject ai-memory-protocol mcp\n"
         )
@@ -89,384 +89,384 @@ def _build_tools() -> list:
     if not _MCP_AVAILABLE:
         return []
     return [
-    Tool(
-        name="memory_recall",
-        description=(
-            "Search memories by free text query and/or tags. "
-            "Returns matching memories formatted for context windows. "
-            "Use format='brief' FIRST to peek at titles, "
-            "then memory_get to drill into specific IDs. "
-            "Recall at EVERY topic transition: new task, "
-            "unfamiliar code, before decisions, when stuck "
-            "— not just session start."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": (
-                        "Free-text search query (OR logic across words). "
-                        "Optional if tag is provided."
-                    ),
-                },
-                "tag": {
-                    "type": "string",
-                    "description": (
-                        "Comma-separated tag filters (AND logic). "
-                        "E.g. 'topic:gateway,repo:ros2_medkit'."
-                    ),
-                },
-                "type": {
-                    "type": "string",
-                    "description": "Filter by memory type: mem, dec, fact, pref, risk, goal, q.",
-                    "enum": ["mem", "dec", "fact", "pref", "risk", "goal", "q"],
-                },
-                "format": {
-                    "type": "string",
-                    "description": (
-                        "Output format: brief (minimal tokens), "
-                        "compact (one-liner), context (grouped by "
-                        "type, default), json."
-                    ),
-                    "enum": ["brief", "compact", "context", "json"],
-                    "default": "context",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of results to return. 0 = unlimited.",
-                    "default": 0,
-                },
-                "body": {
-                    "type": "boolean",
-                    "description": "Include body text in output. Default false to save tokens.",
-                    "default": False,
-                },
-                "sort": {
-                    "type": "string",
-                    "description": "Sort order for results.",
-                    "enum": ["newest", "oldest", "confidence", "updated"],
-                },
-                "expand": {
-                    "type": "integer",
-                    "description": (
-                        "Graph expansion hops from matched memories. "
-                        "0 = exact matches only. Default 1."
-                    ),
-                    "default": 1,
-                },
-                "stale": {
-                    "type": "boolean",
-                    "description": "If true, show only expired or review-overdue memories.",
-                    "default": False,
-                },
-            },
-            "required": [],
-        },
-    ),
-    Tool(
-        name="memory_get",
-        description=(
-            "Get full details of a specific memory by ID — the DRILL step. "
-            "Always shows body text. Use AFTER memory_recall(format='brief') to read "
-            "the 2-3 most relevant memories. Never skip the peek step."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string",
-                    "description": "Memory ID, e.g. DEC_rest_framework or FACT_gateway_port.",
-                },
-            },
-            "required": ["id"],
-        },
-    ),
-    Tool(
-        name="memory_add",
-        description=(
-            "Record a new memory. You MUST use this at specific trigger points: "
-            "chose approach A over B → dec; fixed non-obvious bug → mem; "
-            "discovered undocumented pattern → fact; user stated preference → pref; "
-            "identified risk → risk; question unanswered → q. "
-            "Also batch-write at end of task: architecture learned → fact, conventions → pref. "
-            "Tags are mandatory. Body must be self-contained with file paths and concrete details."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "type": {
-                    "type": "string",
-                    "description": "Memory type.",
-                    "enum": ["mem", "dec", "fact", "pref", "risk", "goal", "q"],
-                },
-                "title": {
-                    "type": "string",
-                    "description": "Short title for the memory.",
-                },
-                "tags": {
-                    "type": "string",
-                    "description": (
-                        "Comma-separated tags in prefix:value format. "
-                        "E.g. 'topic:api,repo:backend'."
-                    ),
-                },
-                "body": {
-                    "type": "string",
-                    "description": "Detailed description text.",
-                },
-                "confidence": {
-                    "type": "string",
-                    "description": "Trust level.",
-                    "enum": ["low", "medium", "high"],
-                    "default": "medium",
-                },
-                "source": {
-                    "type": "string",
-                    "description": "Provenance — URL, commit, ticket, or description of origin.",
-                },
-                "scope": {
-                    "type": "string",
-                    "description": "Applicability scope. E.g. 'global', 'repo:ros2_medkit'.",
-                    "default": "global",
-                },
-                "relates": {
-                    "type": "string",
-                    "description": "Comma-separated IDs of related memories.",
-                },
-                "supersedes": {
-                    "type": "string",
-                    "description": "Comma-separated IDs that this memory supersedes.",
-                },
-                "id": {
-                    "type": "string",
-                    "description": "Custom memory ID. Auto-generated from type + title if omitted.",
-                },
-                "rebuild": {
-                    "type": "boolean",
-                    "description": "Auto-rebuild needs.json after adding. Default true.",
-                    "default": True,
-                },
-            },
-            "required": ["type", "title", "tags"],
-        },
-    ),
-    Tool(
-        name="memory_update",
-        description=(
-            "Update metadata on an existing memory. "
-            "Can change status, confidence, scope, tags, review date, etc."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string",
-                    "description": "Memory ID to update.",
-                },
-                "status": {
-                    "type": "string",
-                    "description": "New status.",
-                    "enum": ["draft", "active", "promoted", "deprecated", "review"],
-                },
-                "confidence": {
-                    "type": "string",
-                    "description": "New confidence level.",
-                    "enum": ["low", "medium", "high"],
-                },
-                "scope": {
-                    "type": "string",
-                    "description": "New scope.",
-                },
-                "review_after": {
-                    "type": "string",
-                    "description": "New review date (ISO-8601, e.g. 2026-06-01).",
-                },
-                "source": {
-                    "type": "string",
-                    "description": "New source/provenance.",
-                },
-                "add_tags": {
-                    "type": "string",
-                    "description": "Tags to add, comma-separated.",
-                },
-                "remove_tags": {
-                    "type": "string",
-                    "description": "Tags to remove, comma-separated.",
-                },
-            },
-            "required": ["id"],
-        },
-    ),
-    Tool(
-        name="memory_deprecate",
-        description=(
-            "Mark a memory as deprecated. Optionally specify the superseding memory. "
-            "Use this instead of editing — supersede, don't silently edit."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string",
-                    "description": "Memory ID to deprecate.",
-                },
-                "by": {
-                    "type": "string",
-                    "description": "ID of the superseding memory.",
-                },
-            },
-            "required": ["id"],
-        },
-    ),
-    Tool(
-        name="memory_tags",
-        description=(
-            "List all tags in use with counts, grouped by prefix. "
-            "Use before filtering to discover available tag prefixes."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "prefix": {
-                    "type": "string",
-                    "description": "Filter by tag prefix, e.g. 'topic' to see only topic:* tags.",
-                },
-            },
-            "required": [],
-        },
-    ),
-    Tool(
-        name="memory_stale",
-        description=(
-            "Show expired or review-overdue memories. "
-            "Use periodically to keep the memory graph fresh."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
-    ),
-    Tool(
-        name="memory_rebuild",
-        description=(
-            "Rebuild needs.json from RST sources by running Sphinx build. "
-            "Required after adding or modifying memories to make changes searchable."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
-    ),
-    Tool(
-        name="memory_plan",
-        description=(
-            "Analyze memory graph and return planned maintenance actions (no modifications). "
-            "Checks for duplicates, missing tags, stale entries, conflicts, tag normalization, "
-            "and oversized files. Returns a list of proposed actions."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "checks": {
-                    "type": "array",
-                    "items": {
+        Tool(
+            name="memory_recall",
+            description=(
+                "Search memories by free text query and/or tags. "
+                "Returns matching memories formatted for context windows. "
+                "Use format='brief' FIRST to peek at titles, "
+                "then memory_get to drill into specific IDs. "
+                "Recall at EVERY topic transition: new task, "
+                "unfamiliar code, before decisions, when stuck "
+                "— not just session start."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
                         "type": "string",
-                        "enum": [
-                            "duplicates",
-                            "missing_tags",
-                            "stale",
-                            "conflicts",
-                            "tag_normalize",
-                            "split_files",
-                        ],
+                        "description": (
+                            "Free-text search query (OR logic across words). "
+                            "Optional if tag is provided."
+                        ),
                     },
-                    "description": "Which checks to run. Default: all.",
+                    "tag": {
+                        "type": "string",
+                        "description": (
+                            "Comma-separated tag filters (AND logic). "
+                            "E.g. 'topic:gateway,repo:ros2_medkit'."
+                        ),
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "Filter by memory type: mem, dec, fact, pref, risk, goal, q.",
+                        "enum": ["mem", "dec", "fact", "pref", "risk", "goal", "q"],
+                    },
+                    "format": {
+                        "type": "string",
+                        "description": (
+                            "Output format: brief (minimal tokens), "
+                            "compact (one-liner), context (grouped by "
+                            "type, default), json."
+                        ),
+                        "enum": ["brief", "compact", "context", "json"],
+                        "default": "context",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return. 0 = unlimited.",
+                        "default": 0,
+                    },
+                    "body": {
+                        "type": "boolean",
+                        "description": "Include body text in output. Default false to save tokens.",
+                        "default": False,
+                    },
+                    "sort": {
+                        "type": "string",
+                        "description": "Sort order for results.",
+                        "enum": ["newest", "oldest", "confidence", "updated"],
+                    },
+                    "expand": {
+                        "type": "integer",
+                        "description": (
+                            "Graph expansion hops from matched memories. "
+                            "0 = exact matches only. Default 1."
+                        ),
+                        "default": 1,
+                    },
+                    "stale": {
+                        "type": "boolean",
+                        "description": "If true, show only expired or review-overdue memories.",
+                        "default": False,
+                    },
                 },
-                "format": {
-                    "type": "string",
-                    "enum": ["human", "json"],
-                    "default": "human",
-                    "description": "Output format. 'json' for machine-readable actions.",
-                },
+                "required": [],
             },
-            "required": [],
-        },
-    ),
-    Tool(
-        name="memory_apply",
-        description=(
-            "Execute a list of planned memory actions, rebuild, and validate. "
-            "Includes git-based rollback on build failure. Pass actions from memory_plan output."
         ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "actions": {
-                    "type": "array",
-                    "items": {"type": "object"},
-                    "description": "Actions from memory_plan output (JSON format).",
+        Tool(
+            name="memory_get",
+            description=(
+                "Get full details of a specific memory by ID — the DRILL step. "
+                "Always shows body text. Use AFTER memory_recall(format='brief') to read "
+                "the 2-3 most relevant memories. Never skip the peek step."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Memory ID, e.g. DEC_rest_framework or FACT_gateway_port.",
+                    },
                 },
-                "auto_commit": {
-                    "type": "boolean",
-                    "default": False,
-                    "description": "Commit changes to git after successful apply.",
-                },
+                "required": ["id"],
             },
-            "required": ["actions"],
-        },
-    ),
-    Tool(
-        name="memory_capture_git",
-        description=(
-            "Analyze git log and generate memory candidates from commit history. "
-            "Classifies commits by conventional commit prefix "
-            "and deduplicates against existing memories."
         ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "repo_path": {
-                    "type": "string",
-                    "description": "Path to git repository. Default: current directory.",
+        Tool(
+            name="memory_add",
+            description=(
+                "Record a new memory. You MUST use this at specific trigger points: "
+                "chose approach A over B → dec; fixed non-obvious bug → mem; "
+                "discovered undocumented pattern → fact; user stated preference → pref; "
+                "identified risk → risk; question unanswered → q. "
+                "Also batch-write at end of task: architecture learned → fact, conventions → pref. "
+                "Tags are mandatory. Body must be self-contained with file paths and concrete details."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "Memory type.",
+                        "enum": ["mem", "dec", "fact", "pref", "risk", "goal", "q"],
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Short title for the memory.",
+                    },
+                    "tags": {
+                        "type": "string",
+                        "description": (
+                            "Comma-separated tags in prefix:value format. "
+                            "E.g. 'topic:api,repo:backend'."
+                        ),
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Detailed description text.",
+                    },
+                    "confidence": {
+                        "type": "string",
+                        "description": "Trust level.",
+                        "enum": ["low", "medium", "high"],
+                        "default": "medium",
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "Provenance — URL, commit, ticket, or description of origin.",
+                    },
+                    "scope": {
+                        "type": "string",
+                        "description": "Applicability scope. E.g. 'global', 'repo:ros2_medkit'.",
+                        "default": "global",
+                    },
+                    "relates": {
+                        "type": "string",
+                        "description": "Comma-separated IDs of related memories.",
+                    },
+                    "supersedes": {
+                        "type": "string",
+                        "description": "Comma-separated IDs that this memory supersedes.",
+                    },
+                    "id": {
+                        "type": "string",
+                        "description": "Custom memory ID. Auto-generated from type + title if omitted.",
+                    },
+                    "rebuild": {
+                        "type": "boolean",
+                        "description": "Auto-rebuild needs.json after adding. Default true.",
+                        "default": True,
+                    },
                 },
-                "since": {
-                    "type": "string",
-                    "default": "HEAD~20",
-                    "description": "Start of range (commit ref or date like '2 weeks ago').",
-                },
-                "until": {
-                    "type": "string",
-                    "default": "HEAD",
-                    "description": "End of range.",
-                },
-                "repo_name": {
-                    "type": "string",
-                    "description": "Repository name for repo: tags. Auto-detected if omitted.",
-                },
-                "min_confidence": {
-                    "type": "string",
-                    "enum": ["low", "medium", "high"],
-                    "default": "low",
-                    "description": "Minimum confidence to include.",
-                },
-                "format": {
-                    "type": "string",
-                    "enum": ["human", "json"],
-                    "default": "human",
-                    "description": "Output format.",
-                },
-                "auto_add": {
-                    "type": "boolean",
-                    "default": False,
-                    "description": "Automatically add candidates to workspace.",
-                },
+                "required": ["type", "title", "tags"],
             },
-            "required": [],
-        },
-    ),
+        ),
+        Tool(
+            name="memory_update",
+            description=(
+                "Update metadata on an existing memory. "
+                "Can change status, confidence, scope, tags, review date, etc."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Memory ID to update.",
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "New status.",
+                        "enum": ["draft", "active", "promoted", "deprecated", "review"],
+                    },
+                    "confidence": {
+                        "type": "string",
+                        "description": "New confidence level.",
+                        "enum": ["low", "medium", "high"],
+                    },
+                    "scope": {
+                        "type": "string",
+                        "description": "New scope.",
+                    },
+                    "review_after": {
+                        "type": "string",
+                        "description": "New review date (ISO-8601, e.g. 2026-06-01).",
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "New source/provenance.",
+                    },
+                    "add_tags": {
+                        "type": "string",
+                        "description": "Tags to add, comma-separated.",
+                    },
+                    "remove_tags": {
+                        "type": "string",
+                        "description": "Tags to remove, comma-separated.",
+                    },
+                },
+                "required": ["id"],
+            },
+        ),
+        Tool(
+            name="memory_deprecate",
+            description=(
+                "Mark a memory as deprecated. Optionally specify the superseding memory. "
+                "Use this instead of editing — supersede, don't silently edit."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Memory ID to deprecate.",
+                    },
+                    "by": {
+                        "type": "string",
+                        "description": "ID of the superseding memory.",
+                    },
+                },
+                "required": ["id"],
+            },
+        ),
+        Tool(
+            name="memory_tags",
+            description=(
+                "List all tags in use with counts, grouped by prefix. "
+                "Use before filtering to discover available tag prefixes."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "prefix": {
+                        "type": "string",
+                        "description": "Filter by tag prefix, e.g. 'topic' to see only topic:* tags.",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="memory_stale",
+            description=(
+                "Show expired or review-overdue memories. "
+                "Use periodically to keep the memory graph fresh."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
+        Tool(
+            name="memory_rebuild",
+            description=(
+                "Rebuild needs.json from RST sources by running Sphinx build. "
+                "Required after adding or modifying memories to make changes searchable."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
+        Tool(
+            name="memory_plan",
+            description=(
+                "Analyze memory graph and return planned maintenance actions (no modifications). "
+                "Checks for duplicates, missing tags, stale entries, conflicts, tag normalization, "
+                "and oversized files. Returns a list of proposed actions."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "checks": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": [
+                                "duplicates",
+                                "missing_tags",
+                                "stale",
+                                "conflicts",
+                                "tag_normalize",
+                                "split_files",
+                            ],
+                        },
+                        "description": "Which checks to run. Default: all.",
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["human", "json"],
+                        "default": "human",
+                        "description": "Output format. 'json' for machine-readable actions.",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="memory_apply",
+            description=(
+                "Execute a list of planned memory actions, rebuild, and validate. "
+                "Includes git-based rollback on build failure. Pass actions from memory_plan output."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "actions": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "Actions from memory_plan output (JSON format).",
+                    },
+                    "auto_commit": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Commit changes to git after successful apply.",
+                    },
+                },
+                "required": ["actions"],
+            },
+        ),
+        Tool(
+            name="memory_capture_git",
+            description=(
+                "Analyze git log and generate memory candidates from commit history. "
+                "Classifies commits by conventional commit prefix "
+                "and deduplicates against existing memories."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo_path": {
+                        "type": "string",
+                        "description": "Path to git repository. Default: current directory.",
+                    },
+                    "since": {
+                        "type": "string",
+                        "default": "HEAD~20",
+                        "description": "Start of range (commit ref or date like '2 weeks ago').",
+                    },
+                    "until": {
+                        "type": "string",
+                        "default": "HEAD",
+                        "description": "End of range.",
+                    },
+                    "repo_name": {
+                        "type": "string",
+                        "description": "Repository name for repo: tags. Auto-detected if omitted.",
+                    },
+                    "min_confidence": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"],
+                        "default": "low",
+                        "description": "Minimum confidence to include.",
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["human", "json"],
+                        "default": "human",
+                        "description": "Output format.",
+                    },
+                    "auto_add": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Automatically add candidates to workspace.",
+                    },
+                },
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -902,7 +902,7 @@ def main_stdio() -> None:
         print(
             "ERROR: MCP SDK not installed.\n"
             "Install with:\n"
-            "  pipx install -e 'ai_memory_protocol/[mcp]'\n"
+            "  pipx install -e '.[mcp]'\n"
             "Or if already installed via pipx:\n"
             "  pipx inject ai-memory-protocol mcp",
             file=sys.stderr,
