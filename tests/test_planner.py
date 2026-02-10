@@ -9,6 +9,7 @@ import pytest
 
 from ai_memory_protocol.planner import (
     Action,
+    detect_auto_summaries,
     detect_conflicts,
     detect_duplicates,
     detect_missing_tags,
@@ -324,6 +325,135 @@ class TestDetectTagNormalization:
     def test_action_type_is_retag(self, needs_with_tag_issues):
         actions = detect_tag_normalization(needs_with_tag_issues)
         assert all(a.kind == "RETAG" for a in actions)
+
+
+# ---------------------------------------------------------------------------
+# Tests: detect_auto_summaries
+# ---------------------------------------------------------------------------
+
+
+class TestDetectAutoSummaries:
+    @pytest.fixture
+    def needs_many_old_observations(self) -> dict:
+        """Six old observations on the same topic."""
+        old_date = (date.today() - timedelta(days=90)).isoformat()
+        return {
+            f"MEM_obs_{i}": {
+                "id": f"MEM_obs_{i}",
+                "type": "mem",
+                "title": f"Observation {i} about gateway",
+                "status": "active",
+                "tags": ["topic:gateway", "repo:ros2_medkit"],
+                "confidence": "medium",
+                "created_at": old_date,
+            }
+            for i in range(6)
+        }
+
+    def test_finds_consolidation_candidates(self, needs_many_old_observations):
+        actions = detect_auto_summaries(needs_many_old_observations)
+        assert len(actions) == 1
+        assert actions[0].kind == "SUPERSEDE"
+        assert actions[0].new_type == "fact"
+        assert "gateway" in actions[0].new_title.lower()
+
+    def test_includes_all_ids(self, needs_many_old_observations):
+        actions = detect_auto_summaries(needs_many_old_observations)
+        old_ids = actions[0].old_id.split(",")
+        assert len(old_ids) == 6
+
+    def test_collects_tags_from_group(self, needs_many_old_observations):
+        actions = detect_auto_summaries(needs_many_old_observations)
+        assert "topic:gateway" in actions[0].new_tags
+        assert "repo:ros2_medkit" in actions[0].new_tags
+
+    def test_skips_below_threshold(self):
+        """Fewer than min_count entries should not trigger."""
+        old_date = (date.today() - timedelta(days=90)).isoformat()
+        needs = {
+            f"MEM_obs_{i}": {
+                "id": f"MEM_obs_{i}",
+                "type": "mem",
+                "title": f"Observation {i}",
+                "status": "active",
+                "tags": ["topic:gateway"],
+                "created_at": old_date,
+            }
+            for i in range(4)  # Only 4, below default min_count=5
+        }
+        actions = detect_auto_summaries(needs)
+        assert len(actions) == 0
+
+    def test_skips_recent_observations(self):
+        """Recent observations should not be consolidated."""
+        recent_date = (date.today() - timedelta(days=10)).isoformat()
+        needs = {
+            f"MEM_obs_{i}": {
+                "id": f"MEM_obs_{i}",
+                "type": "mem",
+                "title": f"Observation {i}",
+                "status": "active",
+                "tags": ["topic:gateway"],
+                "created_at": recent_date,
+            }
+            for i in range(6)
+        }
+        actions = detect_auto_summaries(needs)
+        assert len(actions) == 0
+
+    def test_skips_non_mem_types(self):
+        """Only 'mem' type entries should be considered."""
+        old_date = (date.today() - timedelta(days=90)).isoformat()
+        needs = {
+            f"FACT_obs_{i}": {
+                "id": f"FACT_obs_{i}",
+                "type": "fact",
+                "title": f"Fact {i}",
+                "status": "active",
+                "tags": ["topic:gateway"],
+                "created_at": old_date,
+            }
+            for i in range(6)
+        }
+        actions = detect_auto_summaries(needs)
+        assert len(actions) == 0
+
+    def test_skips_deprecated(self):
+        """Deprecated observations should be excluded."""
+        old_date = (date.today() - timedelta(days=90)).isoformat()
+        needs = {
+            f"MEM_obs_{i}": {
+                "id": f"MEM_obs_{i}",
+                "type": "mem",
+                "title": f"Observation {i}",
+                "status": "deprecated",
+                "tags": ["topic:gateway"],
+                "created_at": old_date,
+            }
+            for i in range(6)
+        }
+        actions = detect_auto_summaries(needs)
+        assert len(actions) == 0
+
+    def test_custom_thresholds(self):
+        """Custom min_count and min_age_days."""
+        old_date = (date.today() - timedelta(days=30)).isoformat()
+        needs = {
+            f"MEM_obs_{i}": {
+                "id": f"MEM_obs_{i}",
+                "type": "mem",
+                "title": f"Observation {i}",
+                "status": "active",
+                "tags": ["topic:gateway"],
+                "created_at": old_date,
+            }
+            for i in range(3)
+        }
+        # Default thresholds: should not trigger
+        assert len(detect_auto_summaries(needs)) == 0
+        # Lower thresholds: should trigger
+        actions = detect_auto_summaries(needs, min_count=3, min_age_days=20)
+        assert len(actions) == 1
 
 
 # ---------------------------------------------------------------------------
