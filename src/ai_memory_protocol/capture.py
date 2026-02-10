@@ -56,8 +56,11 @@ class MemoryCandidate:
 # ---------------------------------------------------------------------------
 
 
-_GIT_LOG_SEP = "---MEMORY_SEP---"
-_GIT_LOG_FORMAT = f"%H{_GIT_LOG_SEP}%s{_GIT_LOG_SEP}%b{_GIT_LOG_SEP}%an{_GIT_LOG_SEP}%ad"
+_GIT_RECORD_SEP = "\x1e"  # ASCII Record Separator between commits
+_GIT_FIELD_SEP = "\x1f"  # ASCII Unit Separator between fields
+_GIT_LOG_FORMAT = (
+    f"%H{_GIT_FIELD_SEP}%s{_GIT_FIELD_SEP}%b{_GIT_FIELD_SEP}%an{_GIT_FIELD_SEP}%ad{_GIT_RECORD_SEP}"
+)
 
 
 @dataclass
@@ -74,35 +77,40 @@ class _GitCommit:
 
 def _parse_git_log(repo_path: Path, since: str, until: str) -> list[_GitCommit]:
     """Run git log and parse the output."""
-    cmd = [
+    # Base git log command
+    cmd: list[str] = [
         "git",
         "log",
         f"--format={_GIT_LOG_FORMAT}",
         "--date=iso-strict",
-        f"{since}..{until}" if ".." not in since and until != "HEAD" else f"{since}...{until}",
     ]
 
-    # Use simpler range format
-    if since and until:
-        cmd = [
-            "git",
-            "log",
-            f"--format={_GIT_LOG_FORMAT}",
-            "--date=iso-strict",
-            f"--since={since}" if not since.startswith("HEAD") else "",
-            f"--until={until}" if not until.startswith("HEAD") else "",
-        ]
-        cmd = [c for c in cmd if c]  # Remove empty strings
+    # Heuristic: if arguments contain spaces (e.g. "2 weeks ago"), treat them as
+    # date expressions and use --since/--until. Otherwise treat them as refs and
+    # use git's revision range syntax.
+    has_since = bool(since)
+    has_until = bool(until)
+    since_is_date = has_since and (" " in since)
+    until_is_date = has_until and (" " in until)
 
-    # Fallback: use commit range directly
-    if since.startswith("HEAD"):
-        cmd = [
-            "git",
-            "log",
-            f"--format={_GIT_LOG_FORMAT}",
-            "--date=iso-strict",
-            f"{since}",
-        ]
+    if has_since and has_until:
+        if since_is_date or until_is_date:
+            # Date-based range
+            cmd.append(f"--since={since}")
+            cmd.append(f"--until={until}")
+        else:
+            # Ref-based range: use {since}..{until}
+            cmd.append(f"{since}..{until}")
+    elif has_since:
+        if since_is_date:
+            cmd.append(f"--since={since}")
+        else:
+            cmd.append(since)
+    elif has_until:
+        if until_is_date:
+            cmd.append(f"--until={until}")
+        else:
+            cmd.append(until)
 
     try:
         result = subprocess.run(
@@ -117,10 +125,12 @@ def _parse_git_log(repo_path: Path, since: str, until: str) -> list[_GitCommit]:
         return []
 
     commits: list[_GitCommit] = []
-    for line in result.stdout.strip().split("\n"):
-        if not line.strip():
+    # Split on record separator — safe even when %b contains newlines
+    for record in result.stdout.split(_GIT_RECORD_SEP):
+        record = record.strip()
+        if not record:
             continue
-        parts = line.split(_GIT_LOG_SEP)
+        parts = record.split(_GIT_FIELD_SEP)
         if len(parts) < 5:
             continue
         commit = _GitCommit(
@@ -143,6 +153,9 @@ def _parse_git_log(repo_path: Path, since: str, until: str) -> list[_GitCommit]:
             )
             c.files = [f.strip() for f in files_result.stdout.strip().split("\n") if f.strip()]
         except OSError:
+            # Best-effort: if git diff-tree fails for this commit (e.g. git not
+            # available or repository in an unexpected state), leave the files
+            # list unchanged for this commit and continue processing others.
             pass
 
     return commits
@@ -418,7 +431,7 @@ def capture_from_git(
                 title=title[:120],
                 body="\n".join(body_parts),
                 tags=sorted(all_tags),
-                source=f"commit:{primary.hash[:8]}+{len(group)-1}",
+                source=f"commit:{primary.hash[:8]}+{len(group) - 1}",
                 confidence=confidence,
                 scope=f"repo:{repo_name}",
                 _source_hashes=[c.hash for c in group],

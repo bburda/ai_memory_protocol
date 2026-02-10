@@ -138,9 +138,7 @@ class TestExecutePlan:
         assert len(result.applied) == 1
 
     def test_deprecate_action(self, workspace_with_memories):
-        actions = [
-            Action(kind="DEPRECATE", reason="outdated", id="MEM_beta")
-        ]
+        actions = [Action(kind="DEPRECATE", reason="outdated", id="MEM_beta")]
         result = execute_plan(workspace_with_memories, actions, rebuild=False)
         assert result.success
         assert len(result.applied) == 1
@@ -246,8 +244,10 @@ class TestActionsFromJson:
         data = [
             {"kind": "RETAG", "reason": "fix tags", "id": "MEM_x", "add_tags": ["topic:new"]},
             {
-                "kind": "UPDATE", "reason": "stale",
-                "id": "MEM_y", "field_changes": {"status": "review"},
+                "kind": "UPDATE",
+                "reason": "stale",
+                "id": "MEM_y",
+                "field_changes": {"status": "review"},
             },
         ]
         actions = actions_from_json(data)

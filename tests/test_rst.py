@@ -31,7 +31,9 @@ class TestGenerateId:
     def test_different_types(self) -> None:
         for typ, prefix in TYPE_PREFIXES.items():
             result = generate_id(typ, "test title")
-            assert result.startswith(f"{prefix}_"), f"ID for type '{typ}' should start with '{prefix}_'"
+            assert result.startswith(f"{prefix}_"), (
+                f"ID for type '{typ}' should start with '{prefix}_'"
+            )
 
     def test_max_length(self) -> None:
         long_title = "a " * 100

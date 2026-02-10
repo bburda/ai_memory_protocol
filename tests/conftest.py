@@ -45,8 +45,7 @@ def tmp_workspace(tmp_path: Path) -> Path:
 
     # Minimal index.rst with toctree
     (ws / "index.rst").write_text(
-        "Test Memory\n===========\n\n"
-        ".. toctree::\n   :glob:\n\n   memory/*\n"
+        "Test Memory\n===========\n\n.. toctree::\n   :glob:\n\n   memory/*\n"
     )
 
     # Memory subdirectory
@@ -61,9 +60,7 @@ def tmp_workspace(tmp_path: Path) -> Path:
             continue
         seen_files.add(filename)
         header = filename.replace(".rst", "").title()
-        (mem_dir / filename).write_text(
-            f"{'=' * len(header)}\n{header}\n{'=' * len(header)}\n\n"
-        )
+        (mem_dir / filename).write_text(f"{'=' * len(header)}\n{header}\n{'=' * len(header)}\n\n")
 
     return ws
 

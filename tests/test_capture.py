@@ -175,8 +175,11 @@ class TestFileOverlap:
 class TestGroupCommits:
     def test_groups_by_file_overlap(self, fix_commit):
         c2 = _GitCommit(
-            hash="222", subject="fix(gateway): another fix", body="",
-            author="", date="",
+            hash="222",
+            subject="fix(gateway): another fix",
+            body="",
+            author="",
+            date="",
             files=["src/gateway/server.cpp"],
         )
         groups = _group_commits([fix_commit, c2])
@@ -298,6 +301,7 @@ class TestFormatCandidates:
         ]
         result = format_candidates(candidates, fmt="json")
         import json
+
         parsed = json.loads(result)
         assert isinstance(parsed, list)
         assert len(parsed) == 1

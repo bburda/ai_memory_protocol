@@ -151,6 +151,7 @@ def _check_rst_files(workspace_dir: str | None) -> tuple[bool, str]:
         return False, f"{len(errors)} unreadable files: {'; '.join(errors)}"
     return True, f"{len(rst_files)} RST files OK"
 
+
 # ---------------------------------------------------------------------------
 # Subcommands
 # ---------------------------------------------------------------------------
@@ -171,12 +172,12 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     """Run installation health checks."""
     ws_dir = getattr(args, "dir", None)
     checks = [
-        ("CLI entry point", lambda: _check_cli()),
+        ("CLI entry point", _check_cli),
         ("Workspace exists", lambda: _check_workspace(ws_dir)),
         ("Sphinx-build available", lambda: _check_sphinx_build(ws_dir)),
         ("needs.json loadable", lambda: _check_needs_json(ws_dir)),
-        ("MCP SDK installed", lambda: _check_mcp_importable()),
-        ("MCP server creatable", lambda: _check_mcp_server()),
+        ("MCP SDK installed", _check_mcp_importable),
+        ("MCP server creatable", _check_mcp_server),
         ("RST files parseable", lambda: _check_rst_files(ws_dir)),
     ]
     all_ok = True

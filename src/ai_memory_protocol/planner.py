@@ -260,7 +260,7 @@ def detect_conflicts(needs: dict[str, Any]) -> list[Action]:
                                 f"the same topic with no explicit relationship link."
                             ),
                             id=id1,
-                            field_changes={},
+                            field_changes={"status": "review"},
                         )
                     )
 
@@ -322,8 +322,7 @@ def detect_split_files(workspace: Path) -> list[Action]:
                     Action(
                         kind="SPLIT_FILE",
                         reason=(
-                            f"{rst_path.name} has {count} entries "
-                            f"(limit: {MAX_ENTRIES_PER_FILE})."
+                            f"{rst_path.name} has {count} entries (limit: {MAX_ENTRIES_PER_FILE})."
                         ),
                         rst_path=str(rst_path),
                     )
@@ -377,7 +376,9 @@ def run_plan(
     for check in selected:
         detector = _DETECTORS.get(check)
         if detector is None:
-            continue
+            raise ValueError(
+                f"Unknown check {check!r} requested. Available checks: {sorted(_DETECTORS.keys())}"
+            )
         # split_files only needs workspace, others need needs dict
         actions = detector(needs, workspace)
         all_actions.extend(actions)

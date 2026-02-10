@@ -64,7 +64,7 @@ jobs:
           python -c "from ai_memory_protocol.mcp_server import create_mcp_server; create_mcp_server()"
 
       - name: Run unit tests
-        run: pytest tests/ -v -m "not integration" --cov=ai_memory_protocol --cov-report=term-missing
+        run: pytest tests/ -v -m "not integration" --cov=ai_memory_protocol --cov-report=term-missing --cov-report=html
 
       - name: Upload coverage
         if: matrix.python-version == '3.12'
@@ -85,7 +85,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install package
-        run: pip install -e '.[mcp]' pytest
+        run: pip install -e '.[mcp]' pytest pytest-timeout
 
       - name: Run integration tests
         run: pytest tests/ -v -m integration --timeout=120
