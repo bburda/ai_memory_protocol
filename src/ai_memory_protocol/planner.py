@@ -324,8 +324,8 @@ def detect_auto_summaries(
     active = _active_needs(needs)
     cutoff = (date.today() - timedelta(days=min_age_days)).isoformat()
 
-    # Group observations by topic tag
-    by_topic: dict[str, list[str]] = defaultdict(list)
+    # Group observations by topic tag (use sets to avoid duplicate IDs)
+    by_topic: dict[str, set[str]] = defaultdict(set)
     for nid, need in active.items():
         if need.get("type") != "mem":
             continue
@@ -334,7 +334,7 @@ def detect_auto_summaries(
             continue
         for tag in need.get("tags", []):
             if tag.startswith("topic:"):
-                by_topic[tag].append(nid)
+                by_topic[tag].add(nid)
 
     actions: list[Action] = []
     for topic_tag, ids in by_topic.items():
@@ -346,6 +346,7 @@ def detect_auto_summaries(
         for nid in ids:
             all_tags.update(active[nid].get("tags", []))
 
+        sorted_ids = sorted(ids)
         actions.append(
             Action(
                 kind="SUPERSEDE",
@@ -354,7 +355,7 @@ def detect_auto_summaries(
                     f"older than {min_age_days} days. Consider consolidating "
                     f"into a single fact."
                 ),
-                old_id=",".join(sorted(ids)),
+                old_id=",".join(sorted_ids),
                 new_type="fact",
                 new_title=f"Consolidated: {topic_value} observations",
                 new_tags=sorted(all_tags),

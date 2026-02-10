@@ -563,7 +563,11 @@ def cmd_capture(args: argparse.Namespace) -> None:
         if log_text is None:
             print("Provide CI log via --input <file> or pipe to stdin.")
             sys.exit(1)
-        extra_tags = [t.strip() for t in args.extra_tags.split(",")] if args.extra_tags else None
+        extra_tags = (
+            [t.strip() for t in args.extra_tags.split(",") if t.strip()]
+            if args.extra_tags
+            else None
+        )
         candidates = capture_from_ci(
             workspace=workspace,
             log_text=log_text,
@@ -577,7 +581,11 @@ def cmd_capture(args: argparse.Namespace) -> None:
         if transcript is None:
             print("Provide transcript via --input <file> or pipe to stdin.")
             sys.exit(1)
-        extra_tags = [t.strip() for t in args.extra_tags.split(",")] if args.extra_tags else None
+        extra_tags = (
+            [t.strip() for t in args.extra_tags.split(",") if t.strip()]
+            if args.extra_tags
+            else None
+        )
         candidates = capture_from_discussion(
             workspace=workspace,
             transcript=transcript,

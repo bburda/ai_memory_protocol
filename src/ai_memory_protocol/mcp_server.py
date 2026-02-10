@@ -381,6 +381,7 @@ def _build_tools() -> list:
                                 "conflicts",
                                 "tag_normalize",
                                 "split_files",
+                                "auto_summaries",
                             ],
                         },
                         "description": "Which checks to run. Default: all.",
