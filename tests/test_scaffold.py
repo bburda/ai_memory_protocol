@@ -67,3 +67,15 @@ class TestInitWorkspace:
         init_workspace(ws, project_name="Test", author="testauthor")
         content = (ws / "conf.py").read_text()
         assert "testauthor" in content
+
+
+class TestConfPyWarnings:
+    def test_scaffold_includes_needs_warnings(self, tmp_path: Path) -> None:
+        from ai_memory_protocol.scaffold import init_workspace
+        ws = tmp_path / "test_ws"
+        init_workspace(ws, "Test", "Author")
+        conf_content = (ws / "conf.py").read_text()
+        assert "needs_warnings" in conf_content
+        assert "missing_topic_tag" in conf_content
+        assert "tag_case_mismatch" in conf_content
+        assert "isolated_decision" in conf_content
