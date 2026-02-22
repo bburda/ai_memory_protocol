@@ -222,6 +222,99 @@ def deprecate_in_rst(
     return success, msg
 
 
+def update_body_in_rst(
+    workspace: Path,
+    need_id: str,
+    new_body: str,
+) -> tuple[bool, str]:
+    """Replace the body text of a need in its RST source file."""
+    for mem_type in TYPE_FILES:
+        for rst_path in _find_all_rst_files(workspace, mem_type):
+            if not rst_path.exists():
+                continue
+            content = rst_path.read_text()
+            if f":id: {need_id}" not in content:
+                continue
+
+            lines = content.split("\n")
+            id_line_idx = None
+            for i, line in enumerate(lines):
+                if f":id: {need_id}" in line:
+                    id_line_idx = i
+                    break
+            if id_line_idx is None:
+                return False, f"Found file but could not locate :id: {need_id}"
+
+            # Find end of metadata (last line starting with whitespace + colon)
+            body_start = id_line_idx + 1
+            while body_start < len(lines) and re.match(r"\s+:\w", lines[body_start]):
+                body_start += 1
+
+            # Skip blank line between metadata and body
+            if body_start < len(lines) and lines[body_start].strip() == "":
+                body_start += 1
+
+            # Find end of body (next blank line or next directive or EOF)
+            body_end = body_start
+            while body_end < len(lines):
+                line = lines[body_end]
+                if line.strip() == "" and body_end > body_start:
+                    break
+                if re.match(r"\.\. \w+::", line):
+                    break
+                body_end += 1
+
+            # Build new body lines
+            new_body_lines = []
+            for bline in textwrap.fill(new_body, width=72).split("\n"):
+                new_body_lines.append(f"   {bline}")
+
+            # Replace
+            lines[body_start:body_end] = new_body_lines
+            rst_path.write_text("\n".join(lines))
+
+            # Update the updated_at field
+            update_field_in_rst(workspace, need_id, "updated_at", date.today().isoformat())
+
+            return True, f"Updated body on {need_id} in {rst_path.name}"
+
+    return False, f"Memory '{need_id}' not found in any RST file."
+
+
+def update_title_in_rst(
+    workspace: Path,
+    need_id: str,
+    new_title: str,
+) -> tuple[bool, str]:
+    """Replace the title of a need in its RST source file."""
+    for mem_type in TYPE_FILES:
+        for rst_path in _find_all_rst_files(workspace, mem_type):
+            if not rst_path.exists():
+                continue
+            content = rst_path.read_text()
+            if f":id: {need_id}" not in content:
+                continue
+
+            lines = content.split("\n")
+            for i, line in enumerate(lines):
+                if f":id: {need_id}" in line:
+                    # Directive line is 1-2 lines above :id:
+                    for j in range(max(0, i - 3), i):
+                        if re.match(r"\.\. \w+::", lines[j]):
+                            directive_type = lines[j].split("::")[0].strip()
+                            lines[j] = f"{directive_type}:: {new_title}"
+                            rst_path.write_text("\n".join(lines))
+                            update_field_in_rst(
+                                workspace, need_id, "updated_at", date.today().isoformat()
+                            )
+                            return True, (
+                                f"Updated title on {need_id} to '{new_title}' in {rst_path.name}"
+                            )
+                    return False, f"Could not find directive line for {need_id}"
+
+    return False, f"Memory '{need_id}' not found in any RST file."
+
+
 def add_tags_in_rst(
     workspace: Path,
     need_id: str,

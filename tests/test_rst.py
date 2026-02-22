@@ -239,3 +239,60 @@ class TestDeprecate:
     def test_deprecate_nonexistent(self, tmp_workspace: Path) -> None:
         ok, msg = deprecate_in_rst(tmp_workspace, "MEM_nonexistent")
         assert not ok
+
+
+class TestUpdateBodyInRst:
+    def test_replace_body(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_body_in_rst
+
+        directive = generate_rst_directive(
+            "fact", "Test Fact", tags=["topic:test"], body="Original body text here."
+        )
+        append_to_rst(tmp_workspace, "fact", directive)
+
+        ok, msg = update_body_in_rst(tmp_workspace, "FACT_test_fact", "Updated body with new content.")
+        assert ok, msg
+        content = (tmp_workspace / "memory" / "facts.rst").read_text()
+        assert "Updated body with new content." in content
+        assert "Original body text here." not in content
+
+    def test_replace_multiline_body(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_body_in_rst
+
+        directive = generate_rst_directive(
+            "dec", "Test Dec", tags=["topic:test"], body="Line one. Line two. Line three."
+        )
+        append_to_rst(tmp_workspace, "dec", directive)
+
+        ok, msg = update_body_in_rst(tmp_workspace, "DEC_test_dec", "New single line body.")
+        assert ok, msg
+        content = (tmp_workspace / "memory" / "decisions.rst").read_text()
+        assert "New single line body." in content
+
+    def test_body_not_found(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_body_in_rst
+
+        ok, msg = update_body_in_rst(tmp_workspace, "FACT_nonexistent", "New body.")
+        assert not ok
+
+
+class TestUpdateTitleInRst:
+    def test_replace_title(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_title_in_rst
+
+        directive = generate_rst_directive(
+            "fact", "Old Title", tags=["topic:test"], body="Some body."
+        )
+        append_to_rst(tmp_workspace, "fact", directive)
+
+        ok, msg = update_title_in_rst(tmp_workspace, "FACT_old_title", "New Title")
+        assert ok, msg
+        content = (tmp_workspace / "memory" / "facts.rst").read_text()
+        assert ".. fact:: New Title" in content
+        assert ".. fact:: Old Title" not in content
+
+    def test_title_not_found(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_title_in_rst
+
+        ok, msg = update_title_in_rst(tmp_workspace, "FACT_nonexistent", "New")
+        assert not ok
