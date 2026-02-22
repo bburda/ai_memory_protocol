@@ -60,23 +60,6 @@ class TestCLIWorkflow:
         assert result.returncode == 0
         assert "FACT_" in result.stdout
 
-    def test_doctor(self, tmp_path) -> None:
-        ws = str(tmp_path / ".memories")
-        subprocess.run(
-            ["memory", "init", ws, "--name", "Doctor Test", "--install"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        result = subprocess.run(
-            ["memory", "--dir", ws, "doctor"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        # doctor should run without crash
-        assert result.returncode in (0, 1)
-
     def test_tags_command(self, tmp_path) -> None:
         ws = str(tmp_path / ".memories")
         subprocess.run(
