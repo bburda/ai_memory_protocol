@@ -275,6 +275,38 @@ class TestUpdateBodyInRst:
         ok, msg = update_body_in_rst(tmp_workspace, "FACT_nonexistent", "New body.")
         assert not ok
 
+    def test_replace_body_preserves_adjacent_directive(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_body_in_rst
+
+        d1 = generate_rst_directive(
+            "mem", "First", need_id="MEM_first", tags=["topic:test"], body="Body one."
+        )
+        d2 = generate_rst_directive(
+            "mem", "Second", need_id="MEM_second", tags=["topic:test"], body="Body two."
+        )
+        append_to_rst(tmp_workspace, "mem", d1)
+        append_to_rst(tmp_workspace, "mem", d2)
+
+        ok, msg = update_body_in_rst(tmp_workspace, "MEM_first", "Updated body one.")
+        assert ok, msg
+        content = (tmp_workspace / "memory" / "observations.rst").read_text()
+        assert "Updated body one." in content
+        assert "Body two." in content
+
+    def test_body_update_sets_updated_at(self, tmp_workspace: Path) -> None:
+        from datetime import date
+
+        from ai_memory_protocol.rst import update_body_in_rst
+
+        directive = generate_rst_directive(
+            "mem", "TS Test", need_id="MEM_ts_test", tags=["topic:test"], body="Old."
+        )
+        append_to_rst(tmp_workspace, "mem", directive)
+        ok, _ = update_body_in_rst(tmp_workspace, "MEM_ts_test", "New.")
+        assert ok
+        content = (tmp_workspace / "memory" / "observations.rst").read_text()
+        assert f":updated_at: {date.today().isoformat()}" in content
+
 
 class TestUpdateTitleInRst:
     def test_replace_title(self, tmp_workspace: Path) -> None:
@@ -296,3 +328,55 @@ class TestUpdateTitleInRst:
 
         ok, msg = update_title_in_rst(tmp_workspace, "FACT_nonexistent", "New")
         assert not ok
+
+    def test_replace_title_with_colon(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_title_in_rst
+
+        directive = generate_rst_directive(
+            "fact", "API endpoint", need_id="FACT_api", tags=["topic:test"], body="Some body."
+        )
+        append_to_rst(tmp_workspace, "fact", directive)
+
+        ok, msg = update_title_in_rst(tmp_workspace, "FACT_api", "API: new endpoint design")
+        assert ok, msg
+        content = (tmp_workspace / "memory" / "facts.rst").read_text()
+        assert ".. fact:: API: new endpoint design" in content
+
+    def test_replace_title_among_multiple_directives(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_title_in_rst
+
+        d1 = generate_rst_directive(
+            "fact", "First fact", need_id="FACT_first", tags=["topic:test"], body="Body."
+        )
+        d2 = generate_rst_directive(
+            "fact", "Second fact", need_id="FACT_second", tags=["topic:test"], body="Body."
+        )
+        append_to_rst(tmp_workspace, "fact", d1)
+        append_to_rst(tmp_workspace, "fact", d2)
+
+        ok, msg = update_title_in_rst(tmp_workspace, "FACT_second", "Renamed second")
+        assert ok, msg
+        content = (tmp_workspace / "memory" / "facts.rst").read_text()
+        assert ".. fact:: First fact" in content
+        assert ".. fact:: Renamed second" in content
+
+    def test_title_sanitizes_newlines(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_title_in_rst
+
+        directive = generate_rst_directive(
+            "fact", "Original", need_id="FACT_orig", tags=["topic:test"], body="Body."
+        )
+        append_to_rst(tmp_workspace, "fact", directive)
+
+        ok, msg = update_title_in_rst(tmp_workspace, "FACT_orig", "Line1\nLine2")
+        assert ok, msg
+        content = (tmp_workspace / "memory" / "facts.rst").read_text()
+        assert ".. fact:: Line1 Line2" in content
+        assert "\nLine2" not in content
+
+    def test_empty_title_rejected(self, tmp_workspace: Path) -> None:
+        from ai_memory_protocol.rst import update_title_in_rst
+
+        ok, msg = update_title_in_rst(tmp_workspace, "FACT_x", "")
+        assert not ok
+        assert "empty" in msg.lower()

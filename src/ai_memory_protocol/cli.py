@@ -27,7 +27,7 @@ from datetime import date
 from pathlib import Path
 
 from . import __version__
-from .config import TYPE_FILES
+from .config import TYPE_DEFAULT_CONFIDENCE, TYPE_FILES
 from .engine import (
     expand_graph,
     find_workspace,
@@ -45,7 +45,9 @@ from .rst import (
     generate_id,
     generate_rst_directive,
     remove_tags_in_rst,
+    update_body_in_rst,
     update_field_in_rst,
+    update_title_in_rst,
 )
 from .scaffold import init_workspace
 
@@ -78,7 +80,7 @@ def cmd_add(args: argparse.Namespace) -> None:
         need_id=args.id,
         tags=tags,
         source=args.source,
-        confidence=args.confidence,
+        confidence=args.confidence or TYPE_DEFAULT_CONFIDENCE.get(args.type, "medium"),
         scope=args.scope,
         owner=args.owner,
         body=args.body,
@@ -224,22 +226,19 @@ def cmd_update(args: argparse.Namespace) -> None:
         any_change = any_change or ok
 
     if getattr(args, "body", None):
-        from .rst import update_body_in_rst
-
         ok, msg = update_body_in_rst(workspace, need_id, args.body)
         print(msg)
         any_change = any_change or ok
 
     if getattr(args, "title", None):
-        from .rst import update_title_in_rst
-
         ok, msg = update_title_in_rst(workspace, need_id, args.title)
         print(msg)
         any_change = any_change or ok
 
     if not any_change:
         print("No changes made. Specify at least one field to update.")
-        print("  --status, --confidence, --scope, --review-after, --add-tags, --remove-tags")
+        print("  --status, --confidence, --scope, --review-after, --source, --owner")
+        print("  --add-tags, --remove-tags, --body, --title")
         return
 
     print("Run 'memory rebuild' to update needs.json")
@@ -467,7 +466,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--id", help="Custom ID (auto-generated if omitted)")
     p_add.add_argument("--tags", help="Tags, comma-separated (use prefix:value format)")
     p_add.add_argument("--source", default="", help="Provenance (URL, commit, description)")
-    p_add.add_argument("--confidence", default="medium", choices=["low", "medium", "high"])
+    p_add.add_argument(
+        "--confidence",
+        choices=["low", "medium", "high"],
+        help="Trust level (defaults by type: fact/dec/pref=high, mem/risk/goal=medium, q=low)",
+    )
     p_add.add_argument("--scope", default="global", help="Scope: global, repo:X, product:X")
     p_add.add_argument("--owner", default="", help="Owner (@username)")
     p_add.add_argument("--body", default="", help="Description text")
