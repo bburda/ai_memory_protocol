@@ -33,7 +33,7 @@ class TestMCPAvailability:
 
 class TestMCPToolDefinitions:
     def test_tool_count(self) -> None:
-        assert len(TOOLS) >= 8
+        assert len(TOOLS) == 8
 
     def test_all_tools_have_schemas(self) -> None:
         for tool in TOOLS:

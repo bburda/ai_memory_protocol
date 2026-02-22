@@ -79,3 +79,5 @@ class TestConfPyWarnings:
         assert "missing_topic_tag" in conf_content
         assert "tag_case_mismatch" in conf_content
         assert "isolated_decision" in conf_content
+        assert "suspicious_high_confidence" in conf_content
+        assert "isolated_memory" in conf_content

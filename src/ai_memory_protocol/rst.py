@@ -287,6 +287,9 @@ def update_title_in_rst(
     new_title: str,
 ) -> tuple[bool, str]:
     """Replace the title of a need in its RST source file."""
+    new_title = new_title.replace("\n", " ").replace("\r", " ").strip()
+    if not new_title:
+        return False, "Title cannot be empty."
     for mem_type in TYPE_FILES:
         for rst_path in _find_all_rst_files(workspace, mem_type):
             if not rst_path.exists():

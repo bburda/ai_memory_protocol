@@ -18,9 +18,8 @@ AI agents lose context between sessions. This protocol gives them a structured w
 - **Auto-scaling** — RST files split at 50 entries, transparent to queries
 - **Git-native** — every memory is an RST directive, fully diffable and versioned
 - **MCP server** — expose memory as tools for Claude Desktop, VS Code Copilot, and other MCP clients
-- **Autonomous capture** — extract memories from Git commits, CI logs, and discussion transcripts
-- **Planning engine** — analyze memory graph and propose maintenance actions
-- **CLI-first** — 16+ subcommands for full lifecycle management
+- **Build-as-guardian** — `needs_warnings` quality gates enforce tagging, linking, and body quality at build time
+- **CLI-first** — 12 subcommands for full lifecycle management
 
 ## Installation
 
@@ -78,18 +77,12 @@ memory recall [query] [--tag ...] [--format brief|compact|context|json]
 memory get <ID>                         # Full details of one memory
 memory related <ID> [--hops N]          # Graph walk from a memory
 memory list [--type TYPE] [--status S]  # Browse all memories
-memory update <ID> [--confidence ...] [--add-tags ...]
+memory update <ID> [--confidence ...] [--add-tags ...] [--body ...] [--title ...]
 memory deprecate <ID> [--by NEW_ID]     # Mark as deprecated
 memory tags [--prefix PREFIX]           # Discover tags in use
 memory stale                            # Find expired/overdue memories
 memory review                           # Show memories needing review
 memory rebuild                          # Rebuild needs.json
-memory capture git                      # Extract memories from recent commits
-memory capture ci --input <file|->      # Extract memories from CI/test logs
-memory capture discussion --input <file|->  # Extract from conversation transcripts
-memory plan [--auto-apply]              # Analyze graph and propose maintenance
-memory apply <plan.json>                # Execute a generated plan
-memory doctor                           # Verify installation health
 ```
 
 Key flags for `recall`:
@@ -158,16 +151,11 @@ Add to `.vscode/mcp.json`:
 | `memory_recall` | Search memories by text/tags with formatting options |
 | `memory_get` | Get full details of a specific memory |
 | `memory_add` | Record a new memory with tags and metadata |
-| `memory_update` | Update metadata (status, confidence, tags, etc.) |
+| `memory_update` | Update content or metadata (title, body, status, confidence, tags, etc.) |
 | `memory_deprecate` | Mark a memory as deprecated |
 | `memory_tags` | List all tags with counts |
 | `memory_stale` | Find expired/overdue memories |
 | `memory_rebuild` | Rebuild needs.json index |
-| `memory_capture_git` | Extract memories from recent Git commits |
-| `memory_capture_ci` | Extract memories from CI/test log output |
-| `memory_capture_discussion` | Extract memories from conversation transcripts |
-| `memory_plan` | Analyze memory graph and propose maintenance actions |
-| `memory_apply` | Execute a generated maintenance plan |
 
 ## Memory Types
 
@@ -295,11 +283,8 @@ ai_memory_protocol/
 └── src/
     └── ai_memory_protocol/
         ├── __init__.py
-        ├── cli.py           # CLI (argparse, 16+ subcommands)
-        ├── mcp_server.py    # MCP server (13 tools, stdio transport)
-        ├── capture.py       # Knowledge extraction (git, CI, discussion)
-        ├── planner.py       # Graph analysis and maintenance planning
-        ├── executor.py      # Plan execution engine
+        ├── cli.py           # CLI (argparse, 12 subcommands)
+        ├── mcp_server.py    # MCP server (8 tools, stdio transport)
         ├── config.py        # Type definitions, constants
         ├── engine.py        # Workspace detection, search, graph walk
         ├── formatter.py     # Output formatting (brief/compact/context/json)
@@ -308,38 +293,6 @@ ai_memory_protocol/
 ```
 
 Memory data lives in a **separate workspace** (e.g., `.memories/`), created with `memory init`.
-
-## Autonomous Workflow
-
-The protocol supports a fully autonomous memory lifecycle — agents can capture, plan, and maintain knowledge without human intervention:
-
-```
-  capture (git / CI / discussion)
-        │
-        ▼
-  plan  (analyze graph → propose actions)
-        │
-        ▼
-  apply (execute plan → add/update/deprecate)
-        │
-        ▼
-  rebuild (sphinx-build → needs.json)
-        │
-        ▼
-  recall (search updated graph)
-```
-
-**Capture sources:**
-- `memory capture git` — scans recent commits, extracts decisions, bug fixes, refactors
-- `memory capture ci --input <log>` — parses test failures, compiler errors, deprecation warnings
-- `memory capture discussion --input <transcript>` — classifies conversation into decisions, facts, preferences, risks, goals, questions
-
-**Planning engine:**
-- `memory plan` — analyzes the memory graph for staleness, missing links, contradictions, and proposes maintenance actions
-- `memory plan --auto-apply` — execute the plan immediately after analysis
-- `memory apply plan.json` — execute a previously saved plan
-
-All captured candidates include provenance (`--source`) and are deduplicated against existing memories.
 
 ## Build-as-Guardian
 

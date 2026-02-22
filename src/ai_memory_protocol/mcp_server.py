@@ -55,7 +55,9 @@ from .rst import (  # noqa: E402
     generate_id,
     generate_rst_directive,
     remove_tags_in_rst,
+    update_body_in_rst,
     update_field_in_rst,
+    update_title_in_rst,
 )
 
 logger = logging.getLogger(__name__)
@@ -249,6 +251,10 @@ def _build_tools() -> list:
                         "type": "string",
                         "description": "Comma-separated IDs that this memory supersedes.",
                     },
+                    "owner": {
+                        "type": "string",
+                        "description": "Owner (@username).",
+                    },
                     "id": {
                         "type": "string",
                         "description": "Custom memory ID. Auto-generated from type + title if omitted.",
@@ -270,8 +276,9 @@ def _build_tools() -> list:
         Tool(
             name="memory_update",
             description=(
-                "Update metadata on an existing memory. "
-                "Can change status, confidence, scope, tags, review date, etc."
+                "Update an existing memory's content or metadata. "
+                "Can change title, body text, status, confidence, scope, "
+                "tags, review date, and owner."
             ),
             inputSchema={
                 "type": "object",
@@ -607,6 +614,7 @@ def _handle_add(args: dict[str, Any]) -> list[TextContent]:
         source=args.get("source", ""),
         confidence=args.get("confidence") or TYPE_DEFAULT_CONFIDENCE.get(args["type"], "medium"),
         scope=args.get("scope", "global"),
+        owner=args.get("owner", ""),
         body=args.get("body", ""),
         relates=relates,
         supersedes=supersedes,
@@ -654,15 +662,11 @@ def _handle_update(args: dict[str, Any]) -> list[TextContent]:
         any_change = any_change or ok
 
     if args.get("body"):
-        from .rst import update_body_in_rst
-
         ok, msg = update_body_in_rst(workspace, need_id, args["body"])
         messages.append(msg)
         any_change = any_change or ok
 
     if args.get("title"):
-        from .rst import update_title_in_rst
-
         ok, msg = update_title_in_rst(workspace, need_id, args["title"])
         messages.append(msg)
         any_change = any_change or ok
