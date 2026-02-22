@@ -219,6 +219,19 @@ needs_statuses = [
 needs_build_json = True
 needs_id_regex = r"^[A-Za-z0-9_-]+"
 needs_role_need_template = "[{{title}}]({{id}})"
+
+# --------------------------------------------------------------------------
+# 6. Quality gates - warnings that fail build with -W flag
+# --------------------------------------------------------------------------
+needs_warnings = {{
+    "missing_topic_tag": "type in ['mem','dec','fact','pref','risk','goal','q'] and not any(t.startswith('topic:') for t in tags)",
+    "empty_body": "description == '' or description == 'TODO: Add description.'",
+    "deprecated_without_supersede": "status == 'deprecated' and len(supersedes_back) == 0",
+    "tag_case_mismatch": "any(t != t.lower() for t in tags)",
+    "missing_repo_tag": "type in ['mem','dec','fact'] and not any(t.startswith('repo:') for t in tags)",
+    "isolated_decision": "type == 'dec' and len(relates) == 0 and len(supersedes) == 0 and len(supersedes_back) == 0",
+    "draft_too_short": "status == 'draft' and (description == '' or len(description) < 20)",
+}}
 """
 
 _INDEX_RST = """\
