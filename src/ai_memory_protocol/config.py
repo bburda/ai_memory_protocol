@@ -46,6 +46,16 @@ DEFAULT_STATUS: dict[str, str] = {
     "q": "active",
 }
 
+TYPE_DEFAULT_CONFIDENCE: dict[str, str] = {
+    "mem": "medium",
+    "dec": "high",
+    "fact": "high",
+    "pref": "high",
+    "risk": "medium",
+    "goal": "medium",
+    "q": "low",
+}
+
 LINK_FIELDS: list[str] = [
     "relates",
     "supports",

@@ -32,6 +32,7 @@ except ImportError:
     TextContent = None  # type: ignore[assignment,misc]
     Tool = None  # type: ignore[assignment,misc]
 
+from .config import TYPE_DEFAULT_CONFIDENCE  # noqa: E402
 from .engine import (  # noqa: E402
     expand_graph,
     find_workspace,
@@ -217,9 +218,13 @@ def _build_tools() -> list:
                     },
                     "confidence": {
                         "type": "string",
-                        "description": "Trust level.",
+                        "description": (
+                            "Trust level: high = verified across 2+ sessions or confirmed by user; "
+                            "medium = observed once, not yet verified; "
+                            "low = hypothesis or guess. "
+                            "Defaults vary by type: fact/dec/pref=high, mem/risk/goal=medium, q=low."
+                        ),
                         "enum": ["low", "medium", "high"],
-                        "default": "medium",
                     },
                     "source": {
                         "type": "string",
@@ -232,7 +237,13 @@ def _build_tools() -> list:
                     },
                     "relates": {
                         "type": "string",
-                        "description": "Comma-separated IDs of related memories.",
+                        "description": (
+                            "Comma-separated IDs of related memories. "
+                            "Use only when no specific link type fits. "
+                            "Prefer: supersedes (replaces), depends (requires), "
+                            "supports (evidence for), contradicts (disagrees with), "
+                            "example_of (concrete case of)."
+                        ),
                     },
                     "supersedes": {
                         "type": "string",
@@ -241,6 +252,11 @@ def _build_tools() -> list:
                     "id": {
                         "type": "string",
                         "description": "Custom memory ID. Auto-generated from type + title if omitted.",
+                    },
+                    "review_days": {
+                        "type": "integer",
+                        "description": "Days until review is due. Default 30.",
+                        "default": 30,
                     },
                     "rebuild": {
                         "type": "boolean",
@@ -301,6 +317,10 @@ def _build_tools() -> list:
                     "title": {
                         "type": "string",
                         "description": "New title. Replaces the directive title.",
+                    },
+                    "owner": {
+                        "type": "string",
+                        "description": "New owner for this memory.",
                     },
                 },
                 "required": ["id"],
@@ -585,11 +605,12 @@ def _handle_add(args: dict[str, Any]) -> list[TextContent]:
         need_id=args.get("id"),
         tags=tags,
         source=args.get("source", ""),
-        confidence=args.get("confidence", "medium"),
+        confidence=args.get("confidence") or TYPE_DEFAULT_CONFIDENCE.get(args["type"], "medium"),
         scope=args.get("scope", "global"),
         body=args.get("body", ""),
         relates=relates,
         supersedes=supersedes,
+        review_days=args.get("review_days", 30),
     )
 
     target = append_to_rst(workspace, args["type"], directive)
@@ -613,7 +634,7 @@ def _handle_update(args: dict[str, Any]) -> list[TextContent]:
     messages: list[str] = []
     any_change = False
 
-    for field in ("status", "confidence", "scope", "review_after", "source"):
+    for field in ("status", "confidence", "scope", "review_after", "source", "owner"):
         value = args.get(field)
         if value is not None:
             ok, msg = update_field_in_rst(workspace, need_id, field, value)

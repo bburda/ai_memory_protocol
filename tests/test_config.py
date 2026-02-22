@@ -6,6 +6,7 @@ from ai_memory_protocol.config import (
     DEFAULT_STATUS,
     LINK_FIELDS,
     METADATA_FIELDS,
+    TYPE_DEFAULT_CONFIDENCE,
     TYPE_FILES,
     TYPE_LABELS,
     TYPE_PREFIXES,
@@ -76,3 +77,9 @@ def test_type_files_in_memory_dir():
     """All type file paths should be under memory/."""
     for typ, path in TYPE_FILES.items():
         assert path.startswith("memory/"), f"Type '{typ}' path should start with 'memory/': {path}"
+
+
+def test_type_default_confidence_covers_all_types():
+    """Every type should have a default confidence level."""
+    for mem_type in TYPE_FILES:
+        assert mem_type in TYPE_DEFAULT_CONFIDENCE, f"Missing confidence default for {mem_type}"
