@@ -294,6 +294,14 @@ def _build_tools() -> list:
                         "type": "string",
                         "description": "Tags to remove, comma-separated.",
                     },
+                    "body": {
+                        "type": "string",
+                        "description": "New body text. Replaces the entire description.",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "New title. Replaces the directive title.",
+                    },
                 },
                 "required": ["id"],
             },
@@ -621,6 +629,20 @@ def _handle_update(args: dict[str, Any]) -> list[TextContent]:
     if args.get("remove_tags"):
         rm_tags = [t.strip() for t in args["remove_tags"].split(",")]
         ok, msg = remove_tags_in_rst(workspace, need_id, rm_tags)
+        messages.append(msg)
+        any_change = any_change or ok
+
+    if args.get("body"):
+        from .rst import update_body_in_rst
+
+        ok, msg = update_body_in_rst(workspace, need_id, args["body"])
+        messages.append(msg)
+        any_change = any_change or ok
+
+    if args.get("title"):
+        from .rst import update_title_in_rst
+
+        ok, msg = update_title_in_rst(workspace, need_id, args["title"])
         messages.append(msg)
         any_change = any_change or ok
 

@@ -223,6 +223,20 @@ def cmd_update(args: argparse.Namespace) -> None:
         print(msg)
         any_change = any_change or ok
 
+    if getattr(args, "body", None):
+        from .rst import update_body_in_rst
+
+        ok, msg = update_body_in_rst(workspace, need_id, args.body)
+        print(msg)
+        any_change = any_change or ok
+
+    if getattr(args, "title", None):
+        from .rst import update_title_in_rst
+
+        ok, msg = update_title_in_rst(workspace, need_id, args.title)
+        print(msg)
+        any_change = any_change or ok
+
     if not any_change:
         print("No changes made. Specify at least one field to update.")
         print("  --status, --confidence, --scope, --review-after, --add-tags, --remove-tags")
@@ -523,6 +537,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_update.add_argument("--owner", help="New owner")
     p_update.add_argument("--add-tags", help="Tags to add, comma-separated")
     p_update.add_argument("--remove-tags", help="Tags to remove, comma-separated")
+    p_update.add_argument("--body", help="New body text (replaces entire description)")
+    p_update.add_argument("--title", help="New title (replaces directive title)")
     p_update.set_defaults(func=cmd_update)
 
     # --- deprecate ---
