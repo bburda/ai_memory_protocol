@@ -232,7 +232,7 @@ needs_warnings = {{
     "isolated_decision": "type == 'dec' and len(relates) == 0 and len(supersedes) == 0 and len(supersedes_back) == 0",
     "draft_too_short": "status == 'draft' and (description == '' or len(description) < 20)",
     "suspicious_high_confidence": "confidence == 'high' and type in ['mem', 'risk', 'goal', 'q']",
-    "isolated_memory": "status != 'draft' and len(relates) == 0 and len(supersedes) == 0 and len(supersedes_back) == 0 and len(depends) == 0 and len(depends_back) == 0 and len(supports) == 0 and len(supports_back) == 0 and len(contradicts) == 0 and len(contradicts_back) == 0 and len(example_of) == 0 and len(example_of_back) == 0",
+    "isolated_memory": "status != 'draft' and (len(relates) + len(supersedes) + len(supersedes_back) + len(depends) + len(depends_back) + len(supports) + len(supports_back) + len(contradicts) + len(contradicts_back) + len(example_of) + len(example_of_back)) == 0",
 }}
 """
 
