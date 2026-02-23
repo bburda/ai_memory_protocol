@@ -250,7 +250,9 @@ class TestUpdateBodyInRst:
         )
         append_to_rst(tmp_workspace, "fact", directive)
 
-        ok, msg = update_body_in_rst(tmp_workspace, "FACT_test_fact", "Updated body with new content.")
+        ok, msg = update_body_in_rst(
+            tmp_workspace, "FACT_test_fact", "Updated body with new content."
+        )
         assert ok, msg
         content = (tmp_workspace / "memory" / "facts.rst").read_text()
         assert "Updated body with new content." in content

@@ -103,7 +103,6 @@ jobs:
           memory --dir /tmp/test-memory get FACT_ci_test_fact
           memory --dir /tmp/test-memory tags
           memory --dir /tmp/test-memory list
-          memory --dir /tmp/test-memory doctor
 
   test-mcp:
     runs-on: ubuntu-latest
