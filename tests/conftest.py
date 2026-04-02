@@ -36,10 +36,10 @@ def tmp_workspace(tmp_path: Path) -> Path:
         '    {"directive": "q", "title": "Open Question", "prefix": "Q_", '
         '"color": "#D9D2E9", "style": "node"},\n'
         "]\n"
-        "needs_extra_options = {\n"
-        '    "source": {}, "owner": {}, "confidence": {}, "scope": {},\n'
-        '    "created_at": {}, "updated_at": {}, "expires_at": {}, "review_after": {},\n'
-        "}\n"
+        "needs_extra_options = [\n"
+        '    "source", "owner", "confidence", "scope",\n'
+        '    "created_at", "updated_at", "expires_at", "review_after",\n'
+        "]\n"
         "needs_build_json = True\n"
     )
 
