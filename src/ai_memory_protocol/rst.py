@@ -222,6 +222,71 @@ def deprecate_in_rst(
     return success, msg
 
 
+def prune_deprecated_from_rst(workspace: Path) -> tuple[int, list[str]]:
+    """Remove all deprecated directive blocks from RST files.
+
+    Returns (count_removed, list of removed IDs).
+    Git preserves history so no data is truly lost.
+    """
+    removed_ids: list[str] = []
+
+    for mem_type in TYPE_FILES:
+        for rst_path in _find_all_rst_files(workspace, mem_type):
+            if not rst_path.exists():
+                continue
+            content = rst_path.read_text()
+            if ":status: deprecated" not in content:
+                continue
+
+            lines = content.split("\n")
+            new_lines: list[str] = []
+            i = 0
+            while i < len(lines):
+                # Detect start of a directive block: ".. type:: Title"
+                directive_match = re.match(r"^\.\. (\w+):: ", lines[i])
+                if not directive_match:
+                    new_lines.append(lines[i])
+                    i += 1
+                    continue
+
+                # Collect the full directive block (directive line + indented body)
+                block_lines = [lines[i]]
+                i += 1
+                while i < len(lines) and (lines[i].startswith("   ") or lines[i].strip() == ""):
+                    # Stop at empty line followed by non-indented content
+                    if lines[i].strip() == "" and (
+                        i + 1 >= len(lines)
+                        or (lines[i + 1].strip() != "" and not lines[i + 1].startswith("   "))
+                    ):
+                            block_lines.append(lines[i])
+                            i += 1
+                            break
+                    block_lines.append(lines[i])
+                    i += 1
+
+                # Check if this block is deprecated
+                block_text = "\n".join(block_lines)
+                if ":status: deprecated" in block_text:
+                    # Extract ID for reporting
+                    id_match = re.search(r":id:\s*(\S+)", block_text)
+                    if id_match:
+                        removed_ids.append(id_match.group(1))
+                    # Skip this block (don't add to new_lines)
+                    # Also skip trailing blank lines
+                    while i < len(lines) and lines[i].strip() == "":
+                        i += 1
+                else:
+                    new_lines.extend(block_lines)
+
+            # Write back cleaned content
+            cleaned = "\n".join(new_lines)
+            # Normalize trailing newlines
+            cleaned = cleaned.rstrip("\n") + "\n"
+            rst_path.write_text(cleaned)
+
+    return len(removed_ids), removed_ids
+
+
 def update_body_in_rst(
     workspace: Path,
     need_id: str,
