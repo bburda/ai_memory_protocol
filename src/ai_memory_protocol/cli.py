@@ -392,11 +392,11 @@ def cmd_stale(args: argparse.Namespace) -> None:
 
 def cmd_prune(args: argparse.Namespace) -> None:
     """Remove deprecated memories from RST files."""
-    workspace = find_workspace(args.dir)
-    needs = load_needs(workspace)
+    from ai_memory_protocol.rst import count_deprecated_in_rst, prune_deprecated_from_rst
 
-    # Count deprecated before pruning
-    deprecated_count = sum(1 for n in needs.values() if n.get("status") == "deprecated")
+    workspace = find_workspace(args.dir)
+
+    deprecated_count = count_deprecated_in_rst(workspace)
     if deprecated_count == 0:
         print("No deprecated memories to prune.")
         return
@@ -405,8 +405,6 @@ def cmd_prune(args: argparse.Namespace) -> None:
         print(f"Found {deprecated_count} deprecated memories to remove from RST files.")
         print("History is preserved in git. Use --yes to confirm.")
         return
-
-    from ai_memory_protocol.rst import prune_deprecated_from_rst
 
     count, _removed = prune_deprecated_from_rst(workspace)
     print(f"Pruned {count} deprecated memories from RST files.")
