@@ -1,6 +1,6 @@
 [project]
 name = "ai-memory-protocol"
-version = "0.3.1"
+version = "0.4.0"
 description = "AI Memory Protocol — versioned, graph-based memory for AI agents using Sphinx-Needs"
 readme = "README.md"
 license = { text = "Apache-2.0" }
