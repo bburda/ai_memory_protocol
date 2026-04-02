@@ -477,7 +477,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--relates", default="", help="Related memory IDs, comma-separated")
     p_add.add_argument("--supersedes", default="", help="IDs this supersedes, comma-separated")
     p_add.add_argument(
-        "--review-days", type=int, default=30, help="Days until review (default: 30)"
+        "--review-days", type=int, default=90, help="Days until review (default: 90)"
     )
     p_add.add_argument("--dry-run", action="store_true", help="Print RST without writing")
     p_add.add_argument(

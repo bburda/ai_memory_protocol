@@ -41,7 +41,7 @@ def generate_rst_directive(
     supports: list[str] | None = None,
     depends: list[str] | None = None,
     supersedes: list[str] | None = None,
-    review_days: int = 30,
+    review_days: int = 90,
 ) -> str:
     """Generate a Sphinx-Needs RST directive string."""
     nid = need_id or generate_id(mem_type, title)
