@@ -14,6 +14,7 @@ Commands:
     memory review                       Show memories due for review
     memory tags                         List all tags in use with counts
     memory stale                        Show expired or review-overdue memories
+    memory prune --yes                  Remove deprecated memories from RST files
     memory rebuild                      Rebuild needs.json from RST sources
 """
 
@@ -389,6 +390,31 @@ def cmd_stale(args: argparse.Namespace) -> None:
                     print(f"    > {body_text[:200].replace(chr(10), ' ')}")
 
 
+def cmd_prune(args: argparse.Namespace) -> None:
+    """Remove deprecated memories from RST files."""
+    workspace = find_workspace(args.dir)
+    needs = load_needs(workspace)
+
+    # Count deprecated before pruning
+    deprecated_count = sum(1 for n in needs.values() if n.get("status") == "deprecated")
+    if deprecated_count == 0:
+        print("No deprecated memories to prune.")
+        return
+
+    if not args.yes:
+        print(f"Found {deprecated_count} deprecated memories to remove from RST files.")
+        print("History is preserved in git. Use --yes to confirm.")
+        return
+
+    from ai_memory_protocol.rst import prune_deprecated_from_rst
+
+    count, _removed = prune_deprecated_from_rst(workspace)
+    print(f"Pruned {count} deprecated memories from RST files.")
+    if count > 0:
+        _ok, msg = run_rebuild(workspace)
+        print(msg)
+
+
 def cmd_rebuild(args: argparse.Namespace) -> None:
     """Rebuild needs.json by running Sphinx build."""
     workspace = find_workspace(args.dir)
@@ -612,6 +638,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--renew", type=int, metavar="DAYS", help="Renew review_after on all stale by N days"
     )
     p_stale.set_defaults(func=cmd_stale)
+
+    # --- prune ---
+    p_prune = sub.add_parser("prune", help="Remove deprecated memories from RST files")
+    p_prune.add_argument("--yes", "-y", action="store_true", help="Confirm removal")
+    p_prune.set_defaults(func=cmd_prune)
 
     # --- rebuild ---
     p_rebuild = sub.add_parser("rebuild", help="Rebuild needs.json from RST sources")
