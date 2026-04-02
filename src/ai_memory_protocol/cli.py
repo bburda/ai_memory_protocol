@@ -253,7 +253,8 @@ def cmd_deprecate(args: argparse.Namespace) -> None:
         ids_to_deprecate = [i.strip() for i in args.ids.split(",") if i.strip()]
     elif args.id:
         ids_to_deprecate = [args.id]
-    else:
+
+    if not ids_to_deprecate:
         print("Error: provide an ID or --ids")
         return
 
@@ -266,7 +267,8 @@ def cmd_deprecate(args: argparse.Namespace) -> None:
 
     if len(ids_to_deprecate) > 1:
         print(f"\nDeprecated {success_count}/{len(ids_to_deprecate)} memories.")
-    print("Run 'memory rebuild' to update needs.json")
+    if success_count > 0:
+        print("Run 'memory rebuild' to update needs.json")
 
 
 def cmd_review(args: argparse.Namespace) -> None:
@@ -370,9 +372,10 @@ def cmd_stale(args: argparse.Namespace) -> None:
         for need in sorted(expired, key=lambda n: n.get("expires_at", "")):
             exp = need.get("expires_at", "")
             print(f"  [EXPIRED {exp}] {format_compact(need)}")
-            if show_body and need.get("content"):
-                body_preview = need["content"][:200].replace("\n", " ")
-                print(f"    > {body_preview}")
+            if show_body:
+                body_text = (need.get("description", "") or need.get("content", "")).strip()
+                if body_text:
+                    print(f"    > {body_text[:200].replace(chr(10), ' ')}")
         print()
 
     if review_due:
@@ -380,9 +383,10 @@ def cmd_stale(args: argparse.Namespace) -> None:
         for need in sorted(review_due, key=lambda n: n.get("review_after", "")):
             ra = need.get("review_after", "")
             print(f"  [REVIEW {ra}] {format_compact(need)}")
-            if show_body and need.get("content"):
-                body_preview = need["content"][:200].replace("\n", " ")
-                print(f"    > {body_preview}")
+            if show_body:
+                body_text = (need.get("description", "") or need.get("content", "")).strip()
+                if body_text:
+                    print(f"    > {body_text[:200].replace(chr(10), ' ')}")
 
 
 def cmd_rebuild(args: argparse.Namespace) -> None:
