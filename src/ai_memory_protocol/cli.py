@@ -14,7 +14,7 @@ Commands:
     memory review                       Show memories due for review
     memory tags                         List all tags in use with counts
     memory stale                        Show expired or review-overdue memories
-    memory prune --yes                  Remove deprecated memories from RST files
+    memory prune [--yes]                Remove deprecated memories from RST files
     memory rebuild                      Rebuild needs.json from RST sources
 """
 
@@ -411,8 +411,10 @@ def cmd_prune(args: argparse.Namespace) -> None:
     count, _removed = prune_deprecated_from_rst(workspace)
     print(f"Pruned {count} deprecated memories from RST files.")
     if count > 0:
-        _ok, msg = run_rebuild(workspace)
+        success, msg = run_rebuild(workspace)
         print(msg)
+        if not success:
+            sys.exit(1)
 
 
 def cmd_rebuild(args: argparse.Namespace) -> None:
