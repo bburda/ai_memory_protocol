@@ -228,6 +228,7 @@ def prune_deprecated_from_rst(workspace: Path) -> tuple[int, list[str]]:
     Returns (count_removed, list of removed IDs).
     Git preserves history so no data is truly lost.
     """
+    removed_count = 0
     removed_ids: list[str] = []
 
     for mem_type in TYPE_FILES:
@@ -267,7 +268,7 @@ def prune_deprecated_from_rst(workspace: Path) -> tuple[int, list[str]]:
                 # Check if this block is deprecated
                 block_text = "\n".join(block_lines)
                 if ":status: deprecated" in block_text:
-                    # Extract ID for reporting
+                    removed_count += 1
                     id_match = re.search(r":id:\s*(\S+)", block_text)
                     if id_match:
                         removed_ids.append(id_match.group(1))
@@ -284,7 +285,7 @@ def prune_deprecated_from_rst(workspace: Path) -> tuple[int, list[str]]:
             cleaned = cleaned.rstrip("\n") + "\n"
             rst_path.write_text(cleaned)
 
-    return len(removed_ids), removed_ids
+    return removed_count, removed_ids
 
 
 def update_body_in_rst(
