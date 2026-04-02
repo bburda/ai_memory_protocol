@@ -786,6 +786,7 @@ def _handle_stale(args: dict[str, Any]) -> list[TextContent]:
     renew_days = args.get("renew_days")
     if renew_days and renew_days > 0:
         from datetime import timedelta as td
+
         new_date = (date.today() + td(days=renew_days)).isoformat()
         count = 0
         all_stale = expired + review_due

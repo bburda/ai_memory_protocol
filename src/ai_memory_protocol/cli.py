@@ -604,7 +604,9 @@ def build_parser() -> argparse.ArgumentParser:
     # --- stale ---
     p_stale = sub.add_parser("stale", help="Show expired or review-overdue memories")
     p_stale.add_argument("--body", action="store_true", help="Show body preview (first 200 chars)")
-    p_stale.add_argument("--renew", type=int, metavar="DAYS", help="Renew review_after on all stale by N days")
+    p_stale.add_argument(
+        "--renew", type=int, metavar="DAYS", help="Renew review_after on all stale by N days"
+    )
     p_stale.set_defaults(func=cmd_stale)
 
     # --- rebuild ---
