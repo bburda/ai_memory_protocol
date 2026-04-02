@@ -258,9 +258,9 @@ def prune_deprecated_from_rst(workspace: Path) -> tuple[int, list[str]]:
                         i + 1 >= len(lines)
                         or (lines[i + 1].strip() != "" and not lines[i + 1].startswith("   "))
                     ):
-                            block_lines.append(lines[i])
-                            i += 1
-                            break
+                        block_lines.append(lines[i])
+                        i += 1
+                        break
                     block_lines.append(lines[i])
                     i += 1
 
