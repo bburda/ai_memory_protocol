@@ -346,6 +346,10 @@ def _build_tools() -> list:
                         "type": "string",
                         "description": "Memory ID to deprecate.",
                     },
+                    "ids": {
+                        "type": "string",
+                        "description": "Comma-separated memory IDs for batch deprecation.",
+                    },
                     "by": {
                         "type": "string",
                         "description": "ID of the superseding memory.",
@@ -356,7 +360,7 @@ def _build_tools() -> list:
                         "default": True,
                     },
                 },
-                "required": ["id"],
+                "required": [],
             },
         ),
         Tool(
@@ -384,7 +388,17 @@ def _build_tools() -> list:
             ),
             inputSchema={
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "body": {
+                        "type": "boolean",
+                        "description": "Include truncated body text (first 200 chars) in output.",
+                        "default": False,
+                    },
+                    "renew_days": {
+                        "type": "integer",
+                        "description": "Renew review_after on all stale memories by N days from today.",
+                    },
+                },
                 "required": [],
             },
         ),
@@ -685,16 +699,33 @@ def _handle_update(args: dict[str, Any]) -> list[TextContent]:
 
 def _handle_deprecate(args: dict[str, Any]) -> list[TextContent]:
     workspace = _get_workspace()
-    ok, msg = deprecate_in_rst(workspace, args["id"], args.get("by"))
-    if not ok:
-        return _text_response(msg)
 
-    if args.get("rebuild", True):
-        success, rebuild_msg = run_rebuild(workspace)
-        msg += f"\n{rebuild_msg}"
+    ids_to_deprecate: list[str] = []
+    if args.get("ids"):
+        ids_to_deprecate = [i.strip() for i in args["ids"].split(",") if i.strip()]
+    elif args.get("id"):
+        ids_to_deprecate = [args["id"]]
     else:
-        msg += "\nRun memory_rebuild to update needs.json."
-    return _text_response(msg)
+        return _text_response("Error: provide 'id' or 'ids' parameter.")
+
+    results: list[str] = []
+    success_count = 0
+    for mid in ids_to_deprecate:
+        ok, msg = deprecate_in_rst(workspace, mid, args.get("by"))
+        results.append(f"  {mid}: {'OK' if ok else 'FAILED'} - {msg}")
+        if ok:
+            success_count += 1
+
+    summary = f"Deprecated {success_count}/{len(ids_to_deprecate)} memories."
+    results.insert(0, summary)
+
+    if args.get("rebuild", True) and success_count > 0:
+        success, rebuild_msg = run_rebuild(workspace)
+        results.append(rebuild_msg)
+    elif success_count > 0:
+        results.append("Run memory_rebuild to update needs.json.")
+
+    return _text_response("\n".join(results))
 
 
 def _handle_tags(args: dict[str, Any]) -> list[TextContent]:
@@ -735,6 +766,7 @@ def _handle_stale(args: dict[str, Any]) -> list[TextContent]:
     workspace = _get_workspace()
     needs = load_needs(workspace)
     today = date.today().isoformat()
+    show_body = args.get("body", False)
 
     expired: list[dict[str, Any]] = []
     review_due: list[dict[str, Any]] = []
@@ -751,19 +783,45 @@ def _handle_stale(args: dict[str, Any]) -> list[TextContent]:
     if not expired and not review_due:
         return _text_response("No stale memories found.")
 
+    renew_days = args.get("renew_days")
+    if renew_days and renew_days > 0:
+        from datetime import timedelta as td
+        new_date = (date.today() + td(days=renew_days)).isoformat()
+        count = 0
+        all_stale = expired + review_due
+        for need in all_stale:
+            nid = need.get("id", "")
+            if nid:
+                ok, _msg = update_field_in_rst(workspace, nid, "review_after", new_date)
+                if ok:
+                    count += 1
+        result = f"Renewed review_after to {new_date} on {count}/{len(all_stale)} stale memories."
+        if count > 0:
+            success, rebuild_msg = run_rebuild(workspace)
+            result += f"\n{rebuild_msg}"
+        return _text_response(result)
+
     lines: list[str] = []
     if expired:
         lines.append(f"## {len(expired)} EXPIRED memories\n")
         for need in sorted(expired, key=lambda n: n.get("expires_at", "")):
             exp = need.get("expires_at", "")
-            lines.append(f"  [EXPIRED {exp}] {format_compact(need)}")
+            line = f"  [EXPIRED {exp}] {format_compact(need)}"
+            if show_body and need.get("content"):
+                body_preview = need["content"][:200].replace("\n", " ")
+                line += f"\n    > {body_preview}"
+            lines.append(line)
         lines.append("")
 
     if review_due:
         lines.append(f"## {len(review_due)} memories overdue for review\n")
         for need in sorted(review_due, key=lambda n: n.get("review_after", "")):
             ra = need.get("review_after", "")
-            lines.append(f"  [REVIEW {ra}] {format_compact(need)}")
+            line = f"  [REVIEW {ra}] {format_compact(need)}"
+            if show_body and need.get("content"):
+                body_preview = need["content"][:200].replace("\n", " ")
+                line += f"\n    > {body_preview}"
+            lines.append(line)
 
     return _text_response("\n".join(lines))
 

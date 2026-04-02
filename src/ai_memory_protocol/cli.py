@@ -247,10 +247,26 @@ def cmd_update(args: argparse.Namespace) -> None:
 def cmd_deprecate(args: argparse.Namespace) -> None:
     """Mark a memory as deprecated."""
     workspace = find_workspace(args.dir)
-    ok, msg = deprecate_in_rst(workspace, args.id, args.by)
-    print(msg)
-    if ok:
-        print("Run 'memory rebuild' to update needs.json")
+
+    ids_to_deprecate: list[str] = []
+    if getattr(args, "ids", None):
+        ids_to_deprecate = [i.strip() for i in args.ids.split(",") if i.strip()]
+    elif args.id:
+        ids_to_deprecate = [args.id]
+    else:
+        print("Error: provide an ID or --ids")
+        return
+
+    success_count = 0
+    for mid in ids_to_deprecate:
+        ok, msg = deprecate_in_rst(workspace, mid, args.by)
+        print(f"  {mid}: {msg}")
+        if ok:
+            success_count += 1
+
+    if len(ids_to_deprecate) > 1:
+        print(f"\nDeprecated {success_count}/{len(ids_to_deprecate)} memories.")
+    print("Run 'memory rebuild' to update needs.json")
 
 
 def cmd_review(args: argparse.Namespace) -> None:
@@ -310,6 +326,8 @@ def cmd_tags(args: argparse.Namespace) -> None:
 
 def cmd_stale(args: argparse.Namespace) -> None:
     """Show expired or review-overdue memories."""
+    from datetime import timedelta
+
     workspace = find_workspace(args.dir)
     needs = load_needs(workspace)
     today = date.today().isoformat()
@@ -330,11 +348,31 @@ def cmd_stale(args: argparse.Namespace) -> None:
         print("No stale memories found.")
         return
 
+    renew = getattr(args, "renew", None)
+    if renew and renew > 0:
+        new_date = (date.today() + timedelta(days=renew)).isoformat()
+        all_stale = expired + review_due
+        count = 0
+        for need in all_stale:
+            nid = need.get("id", "")
+            if nid:
+                ok, _msg = update_field_in_rst(workspace, nid, "review_after", new_date)
+                if ok:
+                    count += 1
+        print(f"Renewed review_after to {new_date} on {count}/{len(all_stale)} stale memories.")
+        print("Run 'memory rebuild' to update needs.json")
+        return
+
+    show_body = getattr(args, "body", False)
+
     if expired:
         print(f"## {len(expired)} EXPIRED memories\n")
         for need in sorted(expired, key=lambda n: n.get("expires_at", "")):
             exp = need.get("expires_at", "")
             print(f"  [EXPIRED {exp}] {format_compact(need)}")
+            if show_body and need.get("content"):
+                body_preview = need["content"][:200].replace("\n", " ")
+                print(f"    > {body_preview}")
         print()
 
     if review_due:
@@ -342,6 +380,9 @@ def cmd_stale(args: argparse.Namespace) -> None:
         for need in sorted(review_due, key=lambda n: n.get("review_after", "")):
             ra = need.get("review_after", "")
             print(f"  [REVIEW {ra}] {format_compact(need)}")
+            if show_body and need.get("content"):
+                body_preview = need["content"][:200].replace("\n", " ")
+                print(f"    > {body_preview}")
 
 
 def cmd_rebuild(args: argparse.Namespace) -> None:
@@ -546,7 +587,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- deprecate ---
     p_dep = sub.add_parser("deprecate", help="Mark a memory as deprecated")
-    p_dep.add_argument("id", help="Memory ID to deprecate")
+    p_dep.add_argument("id", nargs="?", help="Memory ID to deprecate")
+    p_dep.add_argument("--ids", help="Comma-separated IDs for batch deprecation")
     p_dep.add_argument("--by", help="ID of the superseding memory")
     p_dep.set_defaults(func=cmd_deprecate)
 
@@ -561,6 +603,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- stale ---
     p_stale = sub.add_parser("stale", help="Show expired or review-overdue memories")
+    p_stale.add_argument("--body", action="store_true", help="Show body preview (first 200 chars)")
+    p_stale.add_argument("--renew", type=int, metavar="DAYS", help="Renew review_after on all stale by N days")
     p_stale.set_defaults(func=cmd_stale)
 
     # --- rebuild ---
