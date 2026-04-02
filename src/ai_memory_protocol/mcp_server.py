@@ -350,6 +350,11 @@ def _build_tools() -> list:
                         "type": "string",
                         "description": "ID of the superseding memory.",
                     },
+                    "rebuild": {
+                        "type": "boolean",
+                        "description": "Auto-rebuild needs.json after deprecating. Default true.",
+                        "default": True,
+                    },
                 },
                 "required": ["id"],
             },
@@ -681,7 +686,13 @@ def _handle_update(args: dict[str, Any]) -> list[TextContent]:
 def _handle_deprecate(args: dict[str, Any]) -> list[TextContent]:
     workspace = _get_workspace()
     ok, msg = deprecate_in_rst(workspace, args["id"], args.get("by"))
-    if ok:
+    if not ok:
+        return _text_response(msg)
+
+    if args.get("rebuild", True):
+        success, rebuild_msg = run_rebuild(workspace)
+        msg += f"\n{rebuild_msg}"
+    else:
         msg += "\nRun memory_rebuild to update needs.json."
     return _text_response(msg)
 
