@@ -705,7 +705,8 @@ def _handle_deprecate(args: dict[str, Any]) -> list[TextContent]:
         ids_to_deprecate = [i.strip() for i in args["ids"].split(",") if i.strip()]
     elif args.get("id"):
         ids_to_deprecate = [args["id"]]
-    else:
+
+    if not ids_to_deprecate:
         return _text_response("Error: provide 'id' or 'ids' parameter.")
 
     results: list[str] = []
@@ -808,9 +809,10 @@ def _handle_stale(args: dict[str, Any]) -> list[TextContent]:
         for need in sorted(expired, key=lambda n: n.get("expires_at", "")):
             exp = need.get("expires_at", "")
             line = f"  [EXPIRED {exp}] {format_compact(need)}"
-            if show_body and need.get("content"):
-                body_preview = need["content"][:200].replace("\n", " ")
-                line += f"\n    > {body_preview}"
+            if show_body:
+                body_text = (need.get("description", "") or need.get("content", "")).strip()
+                if body_text:
+                    line += f"\n    > {body_text[:200].replace(chr(10), ' ')}"
             lines.append(line)
         lines.append("")
 
@@ -819,9 +821,10 @@ def _handle_stale(args: dict[str, Any]) -> list[TextContent]:
         for need in sorted(review_due, key=lambda n: n.get("review_after", "")):
             ra = need.get("review_after", "")
             line = f"  [REVIEW {ra}] {format_compact(need)}"
-            if show_body and need.get("content"):
-                body_preview = need["content"][:200].replace("\n", " ")
-                line += f"\n    > {body_preview}"
+            if show_body:
+                body_text = (need.get("description", "") or need.get("content", "")).strip()
+                if body_text:
+                    line += f"\n    > {body_text[:200].replace(chr(10), ' ')}"
             lines.append(line)
 
     return _text_response("\n".join(lines))
