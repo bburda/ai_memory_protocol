@@ -222,6 +222,17 @@ def deprecate_in_rst(
     return success, msg
 
 
+def count_deprecated_in_rst(workspace: Path) -> int:
+    """Count deprecated directive blocks across all RST files."""
+    count = 0
+    for mem_type in TYPE_FILES:
+        for rst_path in _find_all_rst_files(workspace, mem_type):
+            if rst_path.exists():
+                content = rst_path.read_text()
+                count += content.count(":status: deprecated")
+    return count
+
+
 def prune_deprecated_from_rst(workspace: Path) -> tuple[int, list[str]]:
     """Remove all deprecated directive blocks from RST files.
 

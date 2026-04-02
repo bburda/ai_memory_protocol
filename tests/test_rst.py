@@ -8,9 +8,11 @@ from ai_memory_protocol.config import TYPE_PREFIXES
 from ai_memory_protocol.rst import (
     add_tags_in_rst,
     append_to_rst,
+    count_deprecated_in_rst,
     deprecate_in_rst,
     generate_id,
     generate_rst_directive,
+    prune_deprecated_from_rst,
     remove_tags_in_rst,
     update_field_in_rst,
 )
@@ -382,3 +384,78 @@ class TestUpdateTitleInRst:
         ok, msg = update_title_in_rst(tmp_workspace, "FACT_x", "")
         assert not ok
         assert "empty" in msg.lower()
+
+
+class TestPruneDeprecated:
+    def test_removes_only_deprecated(self, tmp_workspace: Path) -> None:
+        active = generate_rst_directive(
+            "fact", "Active fact", need_id="FACT_active", tags=["topic:test"], body="Keep me."
+        )
+        deprecated = generate_rst_directive(
+            "fact",
+            "Old fact",
+            need_id="FACT_old",
+            tags=["topic:test"],
+            body="Remove me.",
+        )
+        append_to_rst(tmp_workspace, "fact", active)
+        append_to_rst(tmp_workspace, "fact", deprecated)
+        deprecate_in_rst(tmp_workspace, "FACT_old")
+
+        count, removed_ids = prune_deprecated_from_rst(tmp_workspace)
+
+        assert count == 1
+        assert "FACT_old" in removed_ids
+        content = (tmp_workspace / "memory" / "facts.rst").read_text()
+        assert "FACT_active" in content
+        assert "FACT_old" not in content
+        assert "Keep me." in content
+        assert "Remove me." not in content
+
+    def test_preserves_file_header(self, tmp_workspace: Path) -> None:
+        deprecated = generate_rst_directive(
+            "fact", "Gone", need_id="FACT_gone", tags=["topic:test"], body="Bye."
+        )
+        append_to_rst(tmp_workspace, "fact", deprecated)
+        deprecate_in_rst(tmp_workspace, "FACT_gone")
+
+        prune_deprecated_from_rst(tmp_workspace)
+
+        content = (tmp_workspace / "memory" / "facts.rst").read_text()
+        assert "Facts" in content  # Header preserved
+        assert "FACT_gone" not in content
+
+    def test_handles_split_files(self, tmp_workspace: Path) -> None:
+        # Fill main file to trigger split
+        for i in range(52):
+            d = generate_rst_directive(
+                "mem", f"Obs {i}", need_id=f"MEM_obs_{i}", tags=["topic:test"]
+            )
+            append_to_rst(tmp_workspace, "mem", d)
+
+        # Deprecate one in the split file
+        deprecate_in_rst(tmp_workspace, "MEM_obs_51")
+
+        count, removed_ids = prune_deprecated_from_rst(tmp_workspace)
+        assert count == 1
+        assert "MEM_obs_51" in removed_ids
+
+    def test_count_deprecated(self, tmp_workspace: Path) -> None:
+        for i in range(3):
+            d = generate_rst_directive("fact", f"F{i}", need_id=f"FACT_f{i}", tags=["topic:test"])
+            append_to_rst(tmp_workspace, "fact", d)
+
+        deprecate_in_rst(tmp_workspace, "FACT_f0")
+        deprecate_in_rst(tmp_workspace, "FACT_f2")
+
+        assert count_deprecated_in_rst(tmp_workspace) == 2
+
+    def test_prune_empty_workspace(self, tmp_workspace: Path) -> None:
+        count, removed_ids = prune_deprecated_from_rst(tmp_workspace)
+        assert count == 0
+        assert removed_ids == []
+
+    def test_count_zero_when_none_deprecated(self, tmp_workspace: Path) -> None:
+        d = generate_rst_directive("fact", "Active", need_id="FACT_a", tags=["topic:test"])
+        append_to_rst(tmp_workspace, "fact", d)
+        assert count_deprecated_in_rst(tmp_workspace) == 0
