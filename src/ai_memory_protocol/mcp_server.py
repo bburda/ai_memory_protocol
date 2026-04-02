@@ -261,8 +261,8 @@ def _build_tools() -> list:
                     },
                     "review_days": {
                         "type": "integer",
-                        "description": "Days until review is due. Default 30.",
-                        "default": 30,
+                        "description": "Days until review is due. Default 90.",
+                        "default": 90,
                     },
                     "rebuild": {
                         "type": "boolean",
@@ -618,7 +618,7 @@ def _handle_add(args: dict[str, Any]) -> list[TextContent]:
         body=args.get("body", ""),
         relates=relates,
         supersedes=supersedes,
-        review_days=args.get("review_days", 30),
+        review_days=args.get("review_days", 90),
     )
 
     target = append_to_rst(workspace, args["type"], directive)
