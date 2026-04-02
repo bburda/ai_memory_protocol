@@ -179,16 +179,16 @@ needs_types = [
 # --------------------------------------------------------------------------
 # 2. Extra metadata fields
 # --------------------------------------------------------------------------
-needs_extra_options = {{
-    "source":       {{"description": "Origin: URL, commit hash, ticket, conversation"}},
-    "owner":        {{"description": "Who is responsible for this memory"}},
-    "confidence":   {{"description": "Confidence level: low | medium | high"}},
-    "scope":        {{"description": "Applicability scope: global, repo:X, product:X"}},
-    "created_at":   {{"description": "ISO-8601 creation date"}},
-    "updated_at":   {{"description": "ISO-8601 last update date"}},
-    "expires_at":   {{"description": "ISO-8601 expiry date"}},
-    "review_after": {{"description": "ISO-8601 date after which this memory needs review"}},
-}}
+needs_extra_options = [
+    "source",
+    "owner",
+    "confidence",
+    "scope",
+    "created_at",
+    "updated_at",
+    "expires_at",
+    "review_after",
+]
 
 # --------------------------------------------------------------------------
 # 3. Custom link types
